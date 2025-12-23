@@ -1,0 +1,22 @@
+# Rust
+/target/
+
+# Python
+/.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Nix
+/result
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
