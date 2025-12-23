@@ -38,10 +38,26 @@ impl BabbleMcp {
 
     #[tool(name = "say", description = "Convert text to speech and play it aloud")]
     pub async fn say(&self, params: Parameters<SayParams>) -> Result<String, String> {
-        let server_url = self.server_url.clone();
-        let text = params.0.text.clone();
+        self.speak(&params.0.text, true).await
+    }
 
-        tokio::task::spawn_blocking(move || -> Result<String, String> {
+    #[tool(
+        name = "say_async",
+        description = "Convert text to speech and play in background (returns immediately)"
+    )]
+    pub async fn say_async(&self, params: Parameters<SayParams>) -> Result<String, String> {
+        self.speak(&params.0.text, false).await
+    }
+}
+
+impl BabbleMcp {
+    async fn speak(&self, text: &str, wait: bool) -> Result<String, String> {
+        let server_url = self.server_url.clone();
+        let text = text.to_string();
+        let text_clone = text.clone();
+
+        let handle = tokio::task::spawn_blocking(move || -> Result<String, String> {
+            let text = text_clone;
             use std::io::Read;
 
             let client = reqwest::blocking::Client::new();
@@ -94,9 +110,17 @@ impl BabbleMcp {
             sink.sleep_until_end();
 
             Ok(format!("Spoke: \"{}\"", text))
-        })
-        .await
-        .map_err(|e| format!("Task failed: {}", e))?
+        });
+
+        if wait {
+            handle.await.map_err(|e| format!("Task failed: {}", e))?
+        } else {
+            // Don't wait, let it play in background
+            tokio::spawn(async move {
+                let _ = handle.await;
+            });
+            Ok(format!("Speaking: \"{}\"", text))
+        }
     }
 }
 
