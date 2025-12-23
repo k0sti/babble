@@ -25,6 +25,9 @@
             clippy
             rustfmt
 
+            # Build tools
+            just
+
             # Audio libraries for rodio
             alsa-lib
             pkg-config
