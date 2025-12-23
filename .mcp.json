@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "babble": {
+      "command": "./target/release/babble-mcp",
+      "env": {
+        "BABBLE_SERVER": "http://127.0.0.1:8787"
+      }
+    }
+  }
+}

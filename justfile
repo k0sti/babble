@@ -24,3 +24,7 @@ build:
 # Run TTS on text
 say text: build
     ./target/release/babble -t "{{text}}"
+
+# Run MCP server (for Claude Code integration)
+mcp: build
+    ./target/release/babble-mcp

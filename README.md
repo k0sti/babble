@@ -81,3 +81,29 @@ Voice cloning with reference audio:
 -o, --output <PATH>         Save audio to file instead of playing
     --interactive           Read input line by line from stdin
 ```
+
+## MCP Server
+
+Babble includes an MCP server for integration with Claude Code and other MCP clients.
+
+### Claude Code Configuration
+
+Add to your Claude Code MCP settings (`~/.claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "babble": {
+      "command": "/path/to/babble-mcp",
+      "env": {
+        "BABBLE_SERVER": "http://127.0.0.1:8787"
+      }
+    }
+  }
+}
+```
+
+### Available Tools
+
+- `say` - Convert text to speech and play it aloud
+  - `text` (string, required): The text to speak
