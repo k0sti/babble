@@ -9,7 +9,6 @@ import perth
 perth.PerthImplicitWatermarker = perth.DummyWatermarker
 
 import argparse
-import base64
 import io
 import json
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -49,19 +48,16 @@ class TTSHandler(BaseHTTPRequestHandler):
                     kwargs["cfg_weight"] = cfg_weight
                     wav = TTSHandler.model.generate(**kwargs)
 
-                # Convert to WAV bytes
+                # Convert to WAV bytes and send directly
                 buffer = io.BytesIO()
                 torchaudio.save(buffer, wav, TTSHandler.model.sr, format="wav")
-                buffer.seek(0)
-                audio_bytes = buffer.read()
+                audio_bytes = buffer.getvalue()
 
-                # Send response
-                response = {
-                    "audio": base64.b64encode(audio_bytes).decode("utf-8"),
-                    "sample_rate": TTSHandler.model.sr,
-                }
-
-                self._send_json(200, response)
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/wav")
+                self.send_header("Content-Length", len(audio_bytes))
+                self.end_headers()
+                self.wfile.write(audio_bytes)
 
             except Exception as e:
                 self._send_error(500, str(e))

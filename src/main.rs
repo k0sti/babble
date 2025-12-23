@@ -1,9 +1,8 @@
 use anyhow::{Context, Result};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use clap::Parser;
 use rodio::{Decoder, OutputStream, Sink};
-use serde::{Deserialize, Serialize};
-use std::io::{self, BufRead, Cursor, Write};
+use serde::Serialize;
+use std::io::{self, BufRead, Cursor, Read, Write};
 use std::time::Duration;
 
 /// Text-to-speech CLI using Chatterbox TTS
@@ -48,18 +47,6 @@ struct SynthesizeRequest {
     cfg_weight: f32,
 }
 
-#[derive(Deserialize)]
-struct SynthesizeResponse {
-    audio: String,
-    #[allow(dead_code)]
-    sample_rate: u32,
-}
-
-#[derive(Deserialize)]
-struct ErrorResponse {
-    error: String,
-}
-
 fn synthesize(
     client: &reqwest::blocking::Client,
     server: &str,
@@ -67,7 +54,7 @@ fn synthesize(
 ) -> Result<Vec<u8>> {
     let url = format!("{}/synthesize", server);
 
-    let response = client
+    let mut response = client
         .post(&url)
         .json(request)
         .timeout(Duration::from_secs(120))
@@ -75,19 +62,15 @@ fn synthesize(
         .context("Failed to connect to TTS server")?;
 
     if !response.status().is_success() {
-        let error: ErrorResponse = response
-            .json()
-            .unwrap_or(ErrorResponse {
-                error: "Unknown error".to_string(),
-            });
-        anyhow::bail!("Server error: {}", error.error);
+        let mut body = String::new();
+        response.read_to_string(&mut body).ok();
+        anyhow::bail!("Server error: {}", body);
     }
 
-    let synth_response: SynthesizeResponse = response.json().context("Failed to parse response")?;
-
-    let audio_bytes = BASE64
-        .decode(&synth_response.audio)
-        .context("Failed to decode audio data")?;
+    let mut audio_bytes = Vec::new();
+    response
+        .read_to_end(&mut audio_bytes)
+        .context("Failed to read audio data")?;
 
     Ok(audio_bytes)
 }
@@ -123,11 +106,7 @@ fn check_server(client: &reqwest::blocking::Client, server: &str) -> Result<()> 
     Ok(())
 }
 
-fn process_text(
-    client: &reqwest::blocking::Client,
-    args: &Args,
-    text: &str,
-) -> Result<()> {
+fn process_text(client: &reqwest::blocking::Client, args: &Args, text: &str) -> Result<()> {
     let text = text.trim();
     if text.is_empty() {
         return Ok(());
