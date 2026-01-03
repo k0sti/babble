@@ -382,12 +382,18 @@ impl Orchestrator {
                         // Store for visualization
                         {
                             let mut buffer = recording_buffer.lock();
+                            let prev_len = buffer.len();
                             buffer.extend_from_slice(&samples);
                             // Keep last 2 seconds for visualization
                             let max_samples = 16000 * 2;
                             let len = buffer.len();
                             if len > max_samples {
                                 buffer.drain(0..len - max_samples);
+                            }
+                            // Log occasionally
+                            if prev_len == 0 || (len / 8000 > prev_len / 8000) {
+                                debug!("Orchestrator: recording_buffer now has {} samples (ptr: {:p})",
+                                       buffer.len(), &*buffer as *const _);
                             }
                         }
 

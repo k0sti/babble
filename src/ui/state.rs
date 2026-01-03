@@ -284,6 +284,8 @@ impl AppState {
         self.recording_buffer = handle.recording_buffer();
         self.orchestrator_is_recording = Some(handle.recording_flag());
 
+        info!("Connected to orchestrator - recording_buffer Arc ptr: {:p}",
+              Arc::as_ptr(&self.recording_buffer));
         self.debug_info.add_log("Connected to orchestrator".to_string());
     }
 

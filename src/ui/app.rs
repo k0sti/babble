@@ -223,6 +223,18 @@ impl BabbleApp {
             };
 
             if !samples.is_empty() {
+                // Log occasionally to avoid spam
+                static LAST_LOG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                let last = LAST_LOG.load(std::sync::atomic::Ordering::Relaxed);
+                if now > last {
+                    LAST_LOG.store(now, std::sync::atomic::Ordering::Relaxed);
+                    debug!("Updating waveform with {} samples, waveform_data len: {}",
+                           samples.len(), self.state.waveform_data.len());
+                }
                 self.state.update_waveform(&samples);
             }
         }
