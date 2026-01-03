@@ -1,0 +1,58 @@
+[package]
+name = "babble"
+version = "0.1.0"
+edition = "2021"
+authors = ["Babble Contributors"]
+description = "A voice-enabled AI assistant with real-time speech processing"
+license = "MIT"
+
+[dependencies]
+# LLM - will be implemented in Phase 4
+# mistralrs will be added later
+
+# Speech-to-Text - will be implemented in Phase 3
+# candle-core, whisper, etc. will be added later
+
+# Voice Activity Detection
+voice_activity_detector = "0.2"
+
+# Text-to-Speech - will be implemented in Phase 5
+# piper-rs will be added later
+
+# Audio
+cpal = { version = "0.15", optional = true }
+rubato = "0.15"
+hound = "3.5"
+ringbuf = "0.4"
+
+# GUI
+eframe = "0.29"
+egui = "0.29"
+
+# Async & Channels
+tokio = { version = "1.42", features = ["full"] }
+crossbeam-channel = "0.5"
+
+# Utilities
+uuid = { version = "1.11", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+parking_lot = "0.12"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 1
+
+[features]
+default = ["audio-io"]
+audio-io = ["cpal"]
