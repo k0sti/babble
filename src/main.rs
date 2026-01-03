@@ -1,8 +1,7 @@
-use anyhow::Result;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-fn main() -> Result<()> {
+fn main() -> eframe::Result<()> {
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
@@ -14,9 +13,6 @@ fn main() -> Result<()> {
 
     info!("Starting Babble voice assistant");
 
-    // TODO: Initialize GUI application
-    // For now, just test the audio pipeline
-    babble::audio::test_audio_pipeline()?;
-
-    Ok(())
+    // Run the GUI application
+    babble::ui::run()
 }
