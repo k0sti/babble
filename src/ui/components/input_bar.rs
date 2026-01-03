@@ -4,7 +4,7 @@
 
 use crate::ui::state::{AppState, RecordingState};
 use crate::ui::theme::Theme;
-use egui::{self, RichText, Vec2, Key};
+use egui::{self, Key, RichText, Vec2};
 
 /// Input bar component for text and voice input
 pub struct InputBar<'a> {
@@ -24,6 +24,11 @@ impl<'a> InputBar<'a> {
             .inner_margin(self.theme.spacing)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    // Clear button
+                    self.show_clear_button(ui);
+
+                    ui.add_space(self.theme.spacing_sm);
+
                     // Record button
                     self.show_record_button(ui);
 
@@ -34,10 +39,38 @@ impl<'a> InputBar<'a> {
 
                     ui.add_space(self.theme.spacing_sm);
 
-                    // Send button
-                    self.show_send_button(ui);
+                    // Send text button
+                    self.show_send_text_button(ui);
+
+                    ui.add_space(self.theme.spacing_sm);
+
+                    // Send voice button
+                    self.show_send_voice_button(ui);
                 });
             });
+    }
+
+    fn show_clear_button(&mut self, ui: &mut egui::Ui) {
+        let has_content =
+            !self.state.input_text.trim().is_empty() || !self.state.waveform_data.is_empty();
+        let is_recording = self.state.recording_state != RecordingState::Idle;
+
+        let button = egui::Button::new(RichText::new("🗑").size(18.0).color(if has_content {
+            self.theme.text_secondary
+        } else {
+            self.theme.text_muted
+        }))
+        .min_size(Vec2::splat(44.0))
+        .rounding(self.theme.button_rounding);
+
+        let response = ui.add_enabled(has_content && !is_recording, button);
+
+        if response.clicked() {
+            self.state.input_text.clear();
+            self.state.waveform_data.clear();
+        }
+
+        response.on_hover_text("Clear input");
     }
 
     fn show_record_button(&mut self, ui: &mut egui::Ui) {
@@ -100,7 +133,10 @@ impl<'a> InputBar<'a> {
             painter.circle_stroke(
                 center,
                 radius,
-                egui::Stroke::new(2.0 * pulse, self.theme.recording.gamma_multiply(1.0 - pulse * 0.5)),
+                egui::Stroke::new(
+                    2.0 * pulse,
+                    self.theme.recording.gamma_multiply(1.0 - pulse * 0.5),
+                ),
             );
 
             ui.ctx().request_repaint();
@@ -138,24 +174,20 @@ impl<'a> InputBar<'a> {
         }
     }
 
-    fn show_send_button(&mut self, ui: &mut egui::Ui) {
+    fn show_send_text_button(&mut self, ui: &mut egui::Ui) {
         let can_send = !self.state.input_text.trim().is_empty()
             && !self.state.streaming_response.is_generating
             && self.state.recording_state == RecordingState::Idle;
 
-        let icon = if self.state.streaming_response.is_generating {
-            "⏹" // Stop icon when generating
+        let is_generating = self.state.streaming_response.is_generating;
+
+        let (icon, tooltip) = if is_generating {
+            ("⏹", "Stop generation")
         } else {
-            "➤" // Send icon
+            ("↙", "Send text (Enter)")
         };
 
-        let tooltip = if self.state.streaming_response.is_generating {
-            "Stop generation"
-        } else {
-            "Send message (Enter)"
-        };
-
-        let button_color = if can_send || self.state.streaming_response.is_generating {
+        let button_color = if can_send || is_generating {
             self.theme.primary
         } else {
             self.theme.text_muted
@@ -166,14 +198,11 @@ impl<'a> InputBar<'a> {
             .rounding(self.theme.button_rounding)
             .fill(button_color);
 
-        let response = ui.add_enabled(
-            can_send || self.state.streaming_response.is_generating,
-            button,
-        );
+        let response = ui.add_enabled(can_send || is_generating, button);
 
         if response.clicked() {
-            if self.state.streaming_response.is_generating {
-                // TODO: Cancel generation
+            if is_generating {
+                // Stop generation
                 self.state.streaming_response.is_generating = false;
             } else {
                 self.state.send_message();
@@ -181,6 +210,36 @@ impl<'a> InputBar<'a> {
         }
 
         response.on_hover_text(tooltip);
+    }
+
+    fn show_send_voice_button(&mut self, ui: &mut egui::Ui) {
+        let has_waveform = !self.state.waveform_data.is_empty();
+        let is_recording = self.state.recording_state != RecordingState::Idle;
+        let is_generating = self.state.streaming_response.is_generating;
+
+        // Can send voice when we have recorded waveform data and not currently recording or generating
+        let can_send = has_waveform && !is_recording && !is_generating;
+
+        let button_color = if can_send {
+            self.theme.success
+        } else {
+            self.theme.text_muted
+        };
+
+        let button = egui::Button::new(RichText::new("↗").size(18.0).color(egui::Color32::WHITE))
+            .min_size(Vec2::splat(44.0))
+            .rounding(self.theme.button_rounding)
+            .fill(button_color);
+
+        let response = ui.add_enabled(can_send, button);
+
+        if response.clicked() {
+            // Voice is automatically processed and sent after recording stops
+            // This button could be used for re-sending voice or confirming
+            // For now, voice is sent automatically after transcription
+        }
+
+        response.on_hover_text("Send voice");
     }
 }
 

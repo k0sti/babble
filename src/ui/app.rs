@@ -6,7 +6,7 @@ use crate::integration::{IntegrationConfig, Orchestrator, OrchestratorHandle};
 use crate::ui::components::{AudioPlayer, DebugPanel, InputBar, MessageList, Waveform};
 use crate::ui::state::AppState;
 use crate::ui::theme::Theme;
-use egui::{self, CentralPanel, TopBottomPanel, SidePanel, RichText};
+use egui::{self, CentralPanel, RichText, SidePanel, TopBottomPanel};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Instant;
@@ -57,18 +57,24 @@ impl BabbleApp {
         }
         self.initialized = true;
 
-        self.state.debug_info.add_log("Babble UI initialized".to_string());
+        self.state
+            .debug_info
+            .add_log("Babble UI initialized".to_string());
 
         // Try to initialize the orchestrator
         match self.initialize_orchestrator() {
             Ok(()) => {
                 info!("Backend initialized successfully");
-                self.state.debug_info.add_log("Backend connected".to_string());
+                self.state
+                    .debug_info
+                    .add_log("Backend connected".to_string());
             }
             Err(e) => {
                 error!("Failed to initialize backend: {}", e);
                 self.backend_error = Some(e.clone());
-                self.state.debug_info.add_log(format!("Backend error: {}", e));
+                self.state
+                    .debug_info
+                    .add_log(format!("Backend error: {}", e));
             }
         }
     }
@@ -91,7 +97,8 @@ impl BabbleApp {
         self.orchestrator_handle = Some(Arc::new(handle));
 
         // Start the orchestrator
-        let handles = orchestrator.start()
+        let handles = orchestrator
+            .start()
             .map_err(|e| format!("Failed to start orchestrator: {}", e))?;
         self.worker_handles = handles;
 
@@ -101,7 +108,11 @@ impl BabbleApp {
     /// Show the top header bar
     fn show_header(&mut self, ctx: &egui::Context) {
         TopBottomPanel::top("header")
-            .frame(egui::Frame::none().fill(self.theme.bg_secondary).inner_margin(12.0))
+            .frame(
+                egui::Frame::none()
+                    .fill(self.theme.bg_secondary)
+                    .inner_margin(12.0),
+            )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     // App title
@@ -125,8 +136,16 @@ impl BabbleApp {
                         }
 
                         // Debug toggle
-                        let debug_text = if self.state.show_debug_panel { "🔍" } else { "🔍" };
-                        if ui.button(debug_text).on_hover_text("Toggle Debug Panel").clicked() {
+                        let debug_text = if self.state.show_debug_panel {
+                            "🔍"
+                        } else {
+                            "🔍"
+                        };
+                        if ui
+                            .button(debug_text)
+                            .on_hover_text("Toggle Debug Panel")
+                            .clicked()
+                        {
                             self.state.show_debug_panel = !self.state.show_debug_panel;
                         }
 
@@ -150,23 +169,29 @@ impl BabbleApp {
     /// Show the bottom input area
     fn show_input_area(&mut self, ctx: &egui::Context) {
         TopBottomPanel::bottom("input_area")
-            .frame(egui::Frame::none().fill(self.theme.bg_primary).inner_margin(self.theme.spacing))
+            .frame(
+                egui::Frame::none()
+                    .fill(self.theme.bg_primary)
+                    .inner_margin(self.theme.spacing),
+            )
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     // Waveform visualization (when recording or playing)
-                    let show_waveform = self.state.recording_state != crate::ui::state::RecordingState::Idle
-                        || self.state.audio_player.state != crate::ui::state::PlaybackState::Stopped;
+                    let show_waveform = self.state.recording_state
+                        != crate::ui::state::RecordingState::Idle
+                        || self.state.audio_player.state
+                            != crate::ui::state::PlaybackState::Stopped;
 
                     if show_waveform {
-                        Waveform::new(&self.state, &self.theme).height(50.0).show(ui);
+                        Waveform::new(&self.state, &self.theme)
+                            .height(50.0)
+                            .show(ui);
                         ui.add_space(self.theme.spacing_sm);
                     }
 
-                    // Audio player controls (when audio is available)
-                    if self.state.audio_player.current_audio.is_some() {
-                        AudioPlayer::new(&mut self.state, &self.theme).show(ui);
-                        ui.add_space(self.theme.spacing_sm);
-                    }
+                    // Audio player controls (always visible)
+                    AudioPlayer::new(&mut self.state, &self.theme).show(ui);
+                    ui.add_space(self.theme.spacing_sm);
 
                     // Input bar
                     InputBar::new(&mut self.state, &self.theme).show(ui);
@@ -185,7 +210,11 @@ impl BabbleApp {
             .default_width(300.0)
             .min_width(250.0)
             .max_width(500.0)
-            .frame(egui::Frame::none().fill(self.theme.bg_primary).inner_margin(self.theme.spacing))
+            .frame(
+                egui::Frame::none()
+                    .fill(self.theme.bg_primary)
+                    .inner_margin(self.theme.spacing),
+            )
             .show(ctx, |ui| {
                 DebugPanel::new(&self.state, &self.theme).show(ui);
             });
@@ -236,7 +265,9 @@ impl eframe::App for BabbleApp {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         // Cleanup on exit
-        self.state.debug_info.add_log("Babble shutting down".to_string());
+        self.state
+            .debug_info
+            .add_log("Babble shutting down".to_string());
         info!("Babble shutting down");
 
         // Shutdown orchestrator via LLM command (sends shutdown signal)
