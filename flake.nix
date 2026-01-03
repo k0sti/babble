@@ -27,7 +27,6 @@
         buildInputs = with pkgs; [
           # Audio libraries for cpal
           alsa-lib
-          pkg-config
 
           # Additional dependencies that might be needed
           openssl
@@ -39,6 +38,10 @@
 
         nativeBuildInputs = with pkgs; [
           pkg-config
+          # Required for bindgen (whisper-rs-sys)
+          clang
+          llvmPackages.libclang
+          cmake
         ];
 
       in
@@ -56,6 +59,9 @@
 
           # Environment variables
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+
+          # For bindgen to find libclang
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
 
           # For ALSA on Linux
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;

@@ -146,7 +146,7 @@ impl WhisperEngine {
 
         info!("Whisper model loaded successfully");
 
-        Ok(Self { config, context })
+        Ok(Self { config, context: ctx })
     }
 
     /// Transcribe an audio segment
