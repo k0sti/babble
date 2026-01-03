@@ -7,8 +7,10 @@ description = "A voice-enabled AI assistant with real-time speech processing"
 license = "MIT"
 
 [dependencies]
-# LLM - will be implemented in Phase 4
-# mistralrs will be added later
+# LLM
+mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git" }
+futures = "0.3"
+async-stream = "0.3"
 
 # Speech-to-Text
 whisper-rs = "0.12"
