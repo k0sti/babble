@@ -154,9 +154,19 @@ impl<'a> InputBar<'a> {
             .hint_text("Type a message...")
             .desired_width(available_width)
             .font(egui::TextStyle::Body)
-            .margin(egui::Margin::symmetric(12.0, 8.0));
+            .margin(egui::Margin::symmetric(12.0, 8.0))
+            .id(egui::Id::new("message_input"));
 
         let response = ui.add_enabled(!is_generating && !is_recording, text_edit);
+
+        // Add accessibility name for the text input
+        response.widget_info(|| {
+            egui::WidgetInfo::text_edit(
+                ui.is_enabled() && !is_generating && !is_recording,
+                &self.state.input_text,
+                "Message input",
+            )
+        });
 
         // Handle Enter to send (Shift+Enter for newline in multiline mode)
         if response.has_focus() && !self.state.input_text.trim().is_empty() {
@@ -199,6 +209,15 @@ impl<'a> InputBar<'a> {
             .fill(button_color);
 
         let response = ui.add_enabled(can_send || is_generating, button);
+
+        // Add accessibility label
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                can_send || is_generating,
+                "Send message",
+            )
+        });
 
         if response.clicked() {
             if is_generating {

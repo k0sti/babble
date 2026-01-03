@@ -2,10 +2,10 @@
 //!
 //! Displays the conversation history with support for text, audio, images, and files.
 
-use crate::messages::{Message, MessageContent, Sender, AudioData};
+use crate::messages::{AudioData, Message, MessageContent, Sender};
 use crate::ui::state::{AppState, StreamingResponse};
 use crate::ui::theme::Theme;
-use egui::{self, Color32, RichText, Sense, Vec2, Rect, Pos2, Align};
+use egui::{self, Align, Color32, Pos2, Rect, RichText, Sense, Vec2};
 
 /// Message list component
 pub struct MessageList<'a> {
@@ -140,7 +140,19 @@ impl<'a> MessageList<'a> {
 
                     match &message.content {
                         MessageContent::Text(text) => {
-                            ui.label(RichText::new(text).color(text_color));
+                            let label_text = if is_user {
+                                format!("User message: {}", text)
+                            } else {
+                                format!("Assistant response: {}", text)
+                            };
+                            let response = ui.label(RichText::new(text).color(text_color));
+                            response.widget_info(|| {
+                                egui::WidgetInfo::labeled(
+                                    egui::WidgetType::Label,
+                                    true,
+                                    &label_text,
+                                )
+                            });
                         }
                         MessageContent::Audio(audio) => {
                             self.show_audio_message(ui, audio, text_color);
@@ -167,20 +179,17 @@ impl<'a> MessageList<'a> {
     fn show_audio_message(&self, ui: &mut egui::Ui, audio: &AudioData, text_color: Color32) {
         ui.horizontal(|ui| {
             // Play button
-            let play_btn = ui.add(egui::Button::new(
-                RichText::new("▶").size(16.0).color(text_color),
-            ).min_size(Vec2::splat(32.0)));
+            let play_btn = ui.add(
+                egui::Button::new(RichText::new("▶").size(16.0).color(text_color))
+                    .min_size(Vec2::splat(32.0)),
+            );
 
             if play_btn.clicked() {
                 // TODO: Trigger audio playback
             }
 
             ui.vertical(|ui| {
-                ui.label(
-                    RichText::new("Voice message")
-                        .color(text_color)
-                        .strong(),
-                );
+                ui.label(RichText::new("Voice message").color(text_color).strong());
 
                 let duration = audio.duration_seconds();
                 ui.label(
@@ -222,11 +231,8 @@ impl<'a> MessageList<'a> {
             let end = (start + samples_per_bar).min(samples.len());
 
             // Calculate RMS for this segment
-            let rms: f32 = samples[start..end]
-                .iter()
-                .map(|s| s * s)
-                .sum::<f32>()
-                / (end - start) as f32;
+            let rms: f32 =
+                samples[start..end].iter().map(|s| s * s).sum::<f32>() / (end - start) as f32;
             let rms = rms.sqrt();
 
             let height = (rms * max_height * 4.0).min(max_height);
@@ -250,7 +256,13 @@ impl<'a> MessageList<'a> {
         });
     }
 
-    fn show_file_message(&self, ui: &mut egui::Ui, name: &str, mime_type: &str, text_color: Color32) {
+    fn show_file_message(
+        &self,
+        ui: &mut egui::Ui,
+        name: &str,
+        mime_type: &str,
+        text_color: Color32,
+    ) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("📎").size(20.0));
             ui.vertical(|ui| {
@@ -297,18 +309,22 @@ impl<'a> MessageList<'a> {
                             }
                         });
                     } else {
-                        ui.label(
-                            RichText::new(&response.text)
-                                .color(self.theme.text_primary),
-                        );
+                        let label_response =
+                            ui.label(RichText::new(&response.text).color(self.theme.text_primary));
+                        // Add accessibility label for streaming response
+                        let accessibility_text = format!("Streaming response: {}", &response.text);
+                        label_response.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::WidgetType::Label,
+                                true,
+                                &accessibility_text,
+                            )
+                        });
 
                         // Show blinking cursor
                         let t = ui.ctx().input(|i| i.time);
                         if (t * 2.0).fract() < 0.5 {
-                            ui.label(
-                                RichText::new("▎")
-                                    .color(self.theme.primary),
-                            );
+                            ui.label(RichText::new("▎").color(self.theme.primary));
                         }
                     }
                 });
