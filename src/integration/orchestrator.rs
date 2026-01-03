@@ -281,13 +281,15 @@ impl Orchestrator {
 
         // Start LLM pipeline
         if let Some(llm_pipeline) = self.llm_pipeline.take() {
-            llm_pipeline.start_worker()?;
+            let llm_handle = llm_pipeline.start_worker()?;
+            handles.push(llm_handle);
             info!("LLM pipeline started");
         }
 
         // Start TTS pipeline
         if let Some(tts_pipeline) = self.tts_pipeline.take() {
-            tts_pipeline.start_worker()?;
+            let tts_handle = tts_pipeline.start_worker()?;
+            handles.push(tts_handle);
             info!("TTS pipeline started");
         }
 

@@ -125,12 +125,13 @@ impl LLMPipeline {
     /// Start the pipeline worker thread
     ///
     /// This spawns a new thread that handles LLM inference requests.
-    pub fn start_worker(self) -> Result<()> {
+    /// Returns the JoinHandle for the worker thread.
+    pub fn start_worker(self) -> Result<std::thread::JoinHandle<()>> {
         let config = self.config.clone();
         let command_rx = self.command_rx.clone();
         let event_tx = self.event_tx.clone();
 
-        std::thread::spawn(move || {
+        let handle = std::thread::spawn(move || {
             info!("LLM pipeline worker starting");
 
             // Create tokio runtime for async operations
@@ -288,7 +289,7 @@ impl LLMPipeline {
             info!("LLM pipeline worker stopped");
         });
 
-        Ok(())
+        Ok(handle)
     }
 }
 

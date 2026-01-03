@@ -2,15 +2,16 @@
 //!
 //! This module contains the main BabbleApp that implements eframe::App.
 
-use crate::integration::{IntegrationConfig, Orchestrator, OrchestratorHandle};
+use crate::integration::{IntegrationConfig, Orchestrator, OrchestratorCommand, OrchestratorHandle};
+use crate::speech::tts::TTSCommand;
 use crate::ui::components::{AudioPlayer, DebugPanel, InputBar, MessageList, Waveform};
 use crate::ui::state::AppState;
 use crate::ui::theme::Theme;
 use egui::{self, CentralPanel, RichText, SidePanel, TopBottomPanel};
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use std::time::Instant;
-use tracing::{error, info};
+use std::time::{Duration, Instant};
+use tracing::{error, info, warn};
 
 /// Main Babble application
 pub struct BabbleApp {
@@ -270,15 +271,49 @@ impl eframe::App for BabbleApp {
             .add_log("Babble shutting down".to_string());
         info!("Babble shutting down");
 
-        // Shutdown orchestrator via LLM command (sends shutdown signal)
+        // Send shutdown to all pipelines
+        // 1. Shutdown orchestrator
+        if let Some(handle) = &self.orchestrator_handle {
+            let _ = handle.send_command(OrchestratorCommand::Shutdown);
+        }
+
+        // 2. Shutdown LLM pipeline
         if let Some(tx) = &self.state.llm_command_tx {
             let _ = tx.send(crate::llm::LLMCommand::Shutdown);
         }
 
-        // Wait for worker threads to finish (with timeout)
-        for handle in self.worker_handles.drain(..) {
-            // Give threads a moment to shutdown gracefully
-            let _ = handle.join();
+        // 3. Shutdown TTS pipeline
+        if let Some(tx) = &self.state.tts_command_tx {
+            let _ = tx.send(TTSCommand::Shutdown);
         }
+
+        // Wait for worker threads to finish with timeout
+        const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
+        let shutdown_start = Instant::now();
+
+        for handle in self.worker_handles.drain(..) {
+            let remaining = SHUTDOWN_TIMEOUT.saturating_sub(shutdown_start.elapsed());
+            if remaining.is_zero() {
+                warn!("Shutdown timeout reached, abandoning remaining threads");
+                break;
+            }
+
+            // Use a polling approach since std::thread doesn't have join_timeout
+            // We'll check periodically if the thread is finished
+            let poll_interval = Duration::from_millis(50);
+            loop {
+                if handle.is_finished() {
+                    let _ = handle.join();
+                    break;
+                }
+                if shutdown_start.elapsed() >= SHUTDOWN_TIMEOUT {
+                    warn!("Thread did not finish within timeout, continuing shutdown");
+                    break;
+                }
+                std::thread::sleep(poll_interval);
+            }
+        }
+
+        info!("Babble shutdown complete");
     }
 }

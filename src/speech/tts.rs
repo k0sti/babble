@@ -352,12 +352,13 @@ impl TTSPipeline {
     }
 
     /// Start the pipeline worker thread
-    pub fn start_worker(self) -> Result<()> {
+    /// Returns the JoinHandle for the worker thread.
+    pub fn start_worker(self) -> Result<thread::JoinHandle<()>> {
         let config = self.config.clone();
         let command_rx = self.command_rx.clone();
         let event_tx = self.event_tx.clone();
 
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             info!("TTS pipeline worker starting");
 
             // Initialize the TTS engine
@@ -431,7 +432,7 @@ impl TTSPipeline {
             info!("TTS pipeline worker stopped");
         });
 
-        Ok(())
+        Ok(handle)
     }
 }
 
