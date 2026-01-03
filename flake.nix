@@ -35,6 +35,19 @@
 
           # Additional dependencies that might be needed
           openssl
+
+          # GUI dependencies for eframe/egui
+          libxkbcommon
+          libGL
+
+          # X11 backend
+          xorg.libX11
+          xorg.libXcursor
+          xorg.libXrandr
+          xorg.libXi
+
+          # Wayland backend
+          wayland
         ] ++ lib.optionals stdenv.isDarwin [
           # macOS-specific audio frameworks
           darwin.apple_sdk.frameworks.CoreAudio

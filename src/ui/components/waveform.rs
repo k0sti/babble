@@ -131,7 +131,7 @@ impl<'a> Waveform<'a> {
         };
 
         for (i, &sample) in samples.iter().enumerate() {
-            let sample_idx = (i + time_offset) % sample_count;
+            let _sample_idx = (i + time_offset) % sample_count;
             let x = draw_rect.left() + i as f32 * bar_width;
 
             if x + bar_width > draw_rect.right() {
@@ -217,6 +217,7 @@ impl<'a> Waveform<'a> {
 }
 
 /// Compact waveform for inline display in messages
+#[allow(dead_code)]
 pub struct MiniWaveform<'a> {
     samples: &'a [f32],
     theme: &'a Theme,
@@ -224,6 +225,7 @@ pub struct MiniWaveform<'a> {
     height: f32,
 }
 
+#[allow(dead_code)]
 impl<'a> MiniWaveform<'a> {
     pub fn new(samples: &'a [f32], theme: &'a Theme) -> Self {
         Self {

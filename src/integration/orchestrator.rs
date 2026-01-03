@@ -213,6 +213,7 @@ pub struct Orchestrator {
     transcription_tx: Sender<String>,
 
     /// Playback audio receiver
+    #[allow(dead_code)]
     playback_rx: Receiver<Vec<f32>>,
 }
 
@@ -402,10 +403,12 @@ impl Orchestrator {
 }
 
 /// Builder for creating an orchestrator
+#[allow(dead_code)]
 pub struct OrchestratorBuilder {
     config: IntegrationConfig,
 }
 
+#[allow(dead_code)]
 impl OrchestratorBuilder {
     /// Create a new builder with default configuration
     pub fn new() -> Self {

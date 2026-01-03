@@ -184,11 +184,13 @@ impl<'a> DebugPanel<'a> {
 }
 
 /// Collapsible debug panel with toggle button
+#[allow(dead_code)]
 pub struct CollapsibleDebugPanel<'a> {
     state: &'a mut AppState,
     theme: &'a Theme,
 }
 
+#[allow(dead_code)]
 impl<'a> CollapsibleDebugPanel<'a> {
     pub fn new(state: &'a mut AppState, theme: &'a Theme) -> Self {
         Self { state, theme }

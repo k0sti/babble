@@ -167,21 +167,8 @@ impl Theme {
 
         ctx.set_visuals(visuals);
 
-        // Set up fonts
-        let mut fonts = egui::FontDefinitions::default();
-
-        // Configure font sizes
-        fonts.families.insert(
-            FontFamily::Proportional,
-            vec!["Ubuntu".to_owned(), "Helvetica".to_owned(), "Arial".to_owned()],
-        );
-
-        fonts.families.insert(
-            FontFamily::Monospace,
-            vec!["Ubuntu Mono".to_owned(), "Consolas".to_owned(), "monospace".to_owned()],
-        );
-
-        ctx.set_fonts(fonts);
+        // Use default fonts (egui's built-in fonts)
+        ctx.set_fonts(egui::FontDefinitions::default());
 
         // Set default style
         let mut style = (*ctx.style()).clone();

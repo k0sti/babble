@@ -185,12 +185,14 @@ impl<'a> InputBar<'a> {
 }
 
 /// Compact input for use in dialogs or smaller spaces
+#[allow(dead_code)]
 pub struct CompactInput<'a> {
     value: &'a mut String,
     placeholder: &'a str,
     theme: &'a Theme,
 }
 
+#[allow(dead_code)]
 impl<'a> CompactInput<'a> {
     pub fn new(value: &'a mut String, placeholder: &'a str, theme: &'a Theme) -> Self {
         Self {
