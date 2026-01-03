@@ -10,8 +10,8 @@ license = "MIT"
 # LLM - will be implemented in Phase 4
 # mistralrs will be added later
 
-# Speech-to-Text - will be implemented in Phase 3
-# candle-core, whisper, etc. will be added later
+# Speech-to-Text
+whisper-rs = "0.12"
 
 # Voice Activity Detection
 voice_activity_detector = "0.2"

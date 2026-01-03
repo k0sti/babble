@@ -3,6 +3,7 @@ pub mod buffer;
 pub mod input;
 #[cfg(feature = "audio-io")]
 pub mod output;
+pub mod preprocessor;
 pub mod resampler;
 pub mod vad;
 pub mod wav;
@@ -12,9 +13,10 @@ pub use buffer::AudioRingBuffer;
 pub use input::AudioInput;
 #[cfg(feature = "audio-io")]
 pub use output::AudioOutput;
+pub use preprocessor::{preprocess_for_whisper, AudioPreprocessor};
 pub use resampler::AudioResampler;
 pub use vad::VoiceActivityDetector;
-pub use wav::{write_wav, read_wav};
+pub use wav::{read_wav, write_wav};
 
 use crate::Result;
 use tracing::info;
