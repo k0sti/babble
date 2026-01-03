@@ -85,7 +85,8 @@ impl<'a> InputBar<'a> {
 
         let button = egui::Button::new(RichText::new(icon).size(20.0).color(color))
             .min_size(Vec2::splat(44.0))
-            .rounding(self.theme.button_rounding);
+            .rounding(self.theme.button_rounding)
+            .sense(egui::Sense::click_and_drag()); // Enable drag sensing for push-to-talk
 
         let button = if is_recording {
             button.fill(self.theme.recording.gamma_multiply(0.2))
@@ -98,10 +99,13 @@ impl<'a> InputBar<'a> {
         // Store rect before consuming response with on_hover_text
         let button_rect = response.rect;
 
-        // Handle interactions
+        // Handle interactions - use global pointer state for reliable push-to-talk
         let is_hovered = response.hovered();
-        let is_pointer_down = response.is_pointer_button_down_on();
         let was_right_clicked = response.secondary_clicked();
+        let drag_started = response.drag_started();
+
+        // Check if primary mouse button is currently held down (globally)
+        let primary_down = ui.input(|i| i.pointer.primary_down());
 
         // Show tooltip (this consumes response if we use on_hover_text)
         if is_hovered && !is_processing {
@@ -109,9 +113,13 @@ impl<'a> InputBar<'a> {
         }
 
         // Handle press and release for push-to-talk
-        if is_pointer_down && !is_recording && !is_processing {
+        // Start recording when button is pressed (drag_started or clicked while not recording)
+        if drag_started && !is_recording && !is_processing {
             self.state.start_recording();
-        } else if !is_pointer_down && is_recording {
+        }
+
+        // Stop recording when mouse button is released (check global pointer state)
+        if is_recording && !primary_down {
             self.state.stop_recording();
         }
 
