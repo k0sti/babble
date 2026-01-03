@@ -4,6 +4,7 @@
 
 use crate::integration::{IntegrationConfig, Orchestrator, OrchestratorCommand, OrchestratorHandle};
 use crate::speech::tts::TTSCommand;
+use crate::audio::input::AudioInput;
 use crate::ui::components::{AudioPlayer, DebugPanel, InputBar, MessageList, Waveform};
 use crate::ui::state::AppState;
 use crate::ui::theme::Theme;
@@ -29,6 +30,10 @@ pub struct BabbleApp {
     worker_handles: Vec<JoinHandle<()>>,
     /// Backend initialization error
     backend_error: Option<String>,
+    /// Audio input device
+    audio_input: Option<AudioInput>,
+    /// Previous recording state for detecting transitions
+    prev_recording_state: crate::ui::state::RecordingState,
 }
 
 impl BabbleApp {
@@ -48,6 +53,8 @@ impl BabbleApp {
             orchestrator_handle: None,
             worker_handles: Vec::new(),
             backend_error: None,
+            audio_input: None,
+            prev_recording_state: crate::ui::state::RecordingState::Idle,
         }
     }
 
@@ -78,6 +85,24 @@ impl BabbleApp {
                     .add_log(format!("Backend error: {}", e));
             }
         }
+
+        // Initialize audio input
+        match AudioInput::new() {
+            Ok(audio_input) => {
+                info!("Audio input initialized: {}Hz, {} channels",
+                      audio_input.sample_rate(), audio_input.channels());
+                self.state
+                    .debug_info
+                    .add_log(format!("Audio input ready: {}Hz", audio_input.sample_rate()));
+                self.audio_input = Some(audio_input);
+            }
+            Err(e) => {
+                error!("Failed to initialize audio input: {}", e);
+                self.state
+                    .debug_info
+                    .add_log(format!("Audio input error: {}", e));
+            }
+        }
     }
 
     /// Initialize the orchestrator and connect to app state
@@ -104,6 +129,69 @@ impl BabbleApp {
         self.worker_handles = handles;
 
         Ok(())
+    }
+
+    /// Handle recording state transitions
+    fn handle_recording(&mut self) {
+        use crate::ui::state::RecordingState;
+
+        let current_state = self.state.recording_state;
+
+        if self.prev_recording_state != current_state {
+            match current_state {
+                RecordingState::Recording => {
+                    // Start recording
+                    if let (Some(audio_input), Some(audio_tx)) =
+                        (&mut self.audio_input, &self.state.audio_tx)
+                    {
+                        if let Err(e) = audio_input.start_recording(audio_tx.clone()) {
+                            error!("Failed to start recording: {}", e);
+                            self.state
+                                .debug_info
+                                .add_log(format!("Recording error: {}", e));
+                            self.state.recording_state = RecordingState::Idle;
+                        } else {
+                            info!("Audio recording started");
+                        }
+                    } else {
+                        self.state
+                            .debug_info
+                            .add_log("Audio input not available".to_string());
+                        self.state.recording_state = RecordingState::Idle;
+                    }
+                }
+                RecordingState::Processing | RecordingState::Idle => {
+                    // Stop recording if we were recording
+                    if self.prev_recording_state == RecordingState::Recording {
+                        if let Some(audio_input) = &mut self.audio_input {
+                            if let Err(e) = audio_input.stop_recording() {
+                                error!("Failed to stop recording: {}", e);
+                            } else {
+                                info!("Audio recording stopped");
+                            }
+                        }
+                    }
+                }
+            }
+            self.prev_recording_state = current_state;
+        }
+    }
+
+    /// Update waveform visualization from recording buffer
+    fn update_waveform_from_buffer(&mut self) {
+        use crate::ui::state::RecordingState;
+
+        if self.state.recording_state == RecordingState::Recording {
+            // Get samples from recording buffer without holding lock too long
+            let samples: Vec<f32> = {
+                let buffer = self.state.recording_buffer.lock();
+                buffer.clone()
+            };
+
+            if !samples.is_empty() {
+                self.state.update_waveform(&samples);
+            }
+        }
     }
 
     /// Show the top header bar
@@ -241,6 +329,12 @@ impl eframe::App for BabbleApp {
 
         // Initialize on first frame
         self.initialize();
+
+        // Handle audio recording state changes
+        self.handle_recording();
+
+        // Update waveform visualization from recording buffer
+        self.update_waveform_from_buffer();
 
         // Poll backend events
         self.state.poll_events();
