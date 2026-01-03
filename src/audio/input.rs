@@ -55,7 +55,14 @@ impl AudioInput {
         }
 
         let channels = self.config.channels as usize;
+        let sample_rate = self.config.sample_rate.0;
         let is_recording = Arc::clone(&self.is_recording);
+
+        info!("Building audio input stream: {}Hz, {} channels", sample_rate, channels);
+
+        // Track samples for logging
+        let sample_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let sample_count_clone = Arc::clone(&sample_count);
 
         let err_fn = |err| {
             error!("Audio input stream error: {}", err);
@@ -80,14 +87,25 @@ impl AudioInput {
                             .collect()
                     };
 
+                    let count = sample_count_clone.fetch_add(samples.len(), std::sync::atomic::Ordering::Relaxed);
+
+                    // Log every ~1 second of audio (based on sample rate)
+                    if count % (sample_rate as usize) < samples.len() {
+                        debug!("Audio callback: captured {} total samples ({:.1}s)",
+                               count + samples.len(),
+                               (count + samples.len()) as f32 / sample_rate as f32);
+                    }
+
                     if let Err(e) = audio_tx.try_send(samples) {
-                        debug!("Failed to send audio data: {}", e);
+                        warn!("Failed to send audio data: {} (channel full or disconnected)", e);
                     }
                 },
                 err_fn,
                 None,
             )
             .map_err(|e| BabbleError::AudioDeviceError(format!("Failed to build input stream: {}", e)))?;
+
+        info!("Audio stream built, calling play()");
 
         stream
             .play()
@@ -96,7 +114,7 @@ impl AudioInput {
         *self.is_recording.lock() = true;
         self.stream = Some(stream);
 
-        info!("Started audio recording");
+        info!("Started audio recording successfully - stream is now active");
         Ok(())
     }
 

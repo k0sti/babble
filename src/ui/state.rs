@@ -10,6 +10,8 @@ use crossbeam_channel::{Receiver, Sender as ChannelSender};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::collections::VecDeque;
+use std::time::Instant;
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Recording state for voice input
@@ -227,6 +229,9 @@ pub struct AppState {
 
     /// Frame time tracking for FPS
     frame_times: VecDeque<f64>,
+
+    /// Time when processing started (for timeout)
+    processing_start_time: Option<Instant>,
 }
 
 impl Default for AppState {
@@ -257,6 +262,7 @@ impl AppState {
             recording_buffer: Arc::new(Mutex::new(Vec::new())),
             last_error: None,
             frame_times: VecDeque::with_capacity(60),
+            processing_start_time: None,
         }
     }
 
@@ -334,8 +340,12 @@ impl AppState {
             return;
         }
 
+        let buffer_len = self.recording_buffer.lock().len();
+        info!("stop_recording called, buffer has {} samples", buffer_len);
+
         self.recording_state = RecordingState::Processing;
-        self.debug_info.add_log("Recording stopped, processing...".to_string());
+        self.processing_start_time = Some(Instant::now());
+        self.debug_info.add_log(format!("Recording stopped, processing {} samples...", buffer_len));
 
         // The transcription will be handled by the audio pipeline
         // When we receive the transcription, we'll send it to the LLM
@@ -351,6 +361,19 @@ impl AppState {
 
     /// Process incoming events from backend channels
     pub fn poll_events(&mut self) {
+        // Check for processing timeout (STT not implemented yet, so timeout after 2 seconds)
+        if self.recording_state == RecordingState::Processing {
+            if let Some(start_time) = self.processing_start_time {
+                let elapsed = start_time.elapsed();
+                if elapsed.as_secs() >= 2 {
+                    warn!("Processing timeout after {:?}, STT not available - returning to idle", elapsed);
+                    self.debug_info.add_log("Processing timeout - STT not available".to_string());
+                    self.recording_state = RecordingState::Idle;
+                    self.processing_start_time = None;
+                }
+            }
+        }
+
         // Poll LLM events
         if let Some(rx) = &self.llm_event_rx {
             while let Ok(event) = rx.try_recv() {

@@ -12,7 +12,7 @@ use egui::{self, CentralPanel, RichText, SidePanel, TopBottomPanel};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Main Babble application
 pub struct BabbleApp {
@@ -138,12 +138,19 @@ impl BabbleApp {
         let current_state = self.state.recording_state;
 
         if self.prev_recording_state != current_state {
+            info!("Recording state transition: {:?} -> {:?}", self.prev_recording_state, current_state);
+
             match current_state {
                 RecordingState::Recording => {
                     // Start recording
+                    debug!("Attempting to start recording...");
+                    debug!("  audio_input present: {}", self.audio_input.is_some());
+                    debug!("  audio_tx present: {}", self.state.audio_tx.is_some());
+
                     if let (Some(audio_input), Some(audio_tx)) =
                         (&mut self.audio_input, &self.state.audio_tx)
                     {
+                        info!("Starting audio input with channel...");
                         if let Err(e) = audio_input.start_recording(audio_tx.clone()) {
                             error!("Failed to start recording: {}", e);
                             self.state
@@ -151,23 +158,50 @@ impl BabbleApp {
                                 .add_log(format!("Recording error: {}", e));
                             self.state.recording_state = RecordingState::Idle;
                         } else {
-                            info!("Audio recording started");
+                            info!("Audio recording started successfully");
+                            self.state
+                                .debug_info
+                                .add_log("Recording started".to_string());
                         }
                     } else {
+                        warn!("Cannot start recording: audio_input={}, audio_tx={}",
+                              self.audio_input.is_some(), self.state.audio_tx.is_some());
                         self.state
                             .debug_info
                             .add_log("Audio input not available".to_string());
                         self.state.recording_state = RecordingState::Idle;
                     }
                 }
-                RecordingState::Processing | RecordingState::Idle => {
+                RecordingState::Processing => {
+                    info!("Transitioning to Processing state");
                     // Stop recording if we were recording
                     if self.prev_recording_state == RecordingState::Recording {
                         if let Some(audio_input) = &mut self.audio_input {
+                            info!("Stopping audio input...");
                             if let Err(e) = audio_input.stop_recording() {
                                 error!("Failed to stop recording: {}", e);
                             } else {
-                                info!("Audio recording stopped");
+                                info!("Audio recording stopped, now processing");
+                            }
+                        }
+                        // Log buffer size
+                        let buffer_len = self.state.recording_buffer.lock().len();
+                        info!("Recording buffer contains {} samples", buffer_len);
+                        self.state
+                            .debug_info
+                            .add_log(format!("Processing {} samples", buffer_len));
+                    }
+                }
+                RecordingState::Idle => {
+                    info!("Transitioning to Idle state");
+                    // Stop recording if we were recording
+                    if self.prev_recording_state == RecordingState::Recording {
+                        if let Some(audio_input) = &mut self.audio_input {
+                            info!("Stopping audio input (cancelled)...");
+                            if let Err(e) = audio_input.stop_recording() {
+                                error!("Failed to stop recording: {}", e);
+                            } else {
+                                info!("Audio recording stopped (cancelled)");
                             }
                         }
                     }
