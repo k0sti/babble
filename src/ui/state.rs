@@ -9,6 +9,7 @@ use crate::speech::tts::{TTSCommand, TTSEvent, AudioQueue};
 use crossbeam_channel::{Receiver, Sender as ChannelSender};
 use parking_lot::Mutex;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::VecDeque;
 use std::time::Instant;
 use tracing::{debug, info, warn};
@@ -224,6 +225,9 @@ pub struct AppState {
     /// Recording audio buffer
     pub recording_buffer: Arc<Mutex<Vec<f32>>>,
 
+    /// Orchestrator's recording flag (shared with orchestrator thread)
+    orchestrator_is_recording: Option<Arc<AtomicBool>>,
+
     /// Last error message
     pub last_error: Option<String>,
 
@@ -260,6 +264,7 @@ impl AppState {
             audio_tx: None,
             transcription_rx: None,
             recording_buffer: Arc::new(Mutex::new(Vec::new())),
+            orchestrator_is_recording: None,
             last_error: None,
             frame_times: VecDeque::with_capacity(60),
             processing_start_time: None,
@@ -277,6 +282,7 @@ impl AppState {
         self.transcription_rx = Some(handle.transcription_receiver());
         self.audio_tx = Some(handle.audio_sender());
         self.recording_buffer = handle.recording_buffer();
+        self.orchestrator_is_recording = Some(handle.recording_flag());
 
         self.debug_info.add_log("Connected to orchestrator".to_string());
     }
@@ -331,6 +337,13 @@ impl AppState {
         self.recording_state = RecordingState::Recording;
         self.recording_buffer.lock().clear();
         self.waveform_data.clear();
+
+        // Set the orchestrator's recording flag so it stores incoming samples
+        if let Some(ref flag) = self.orchestrator_is_recording {
+            flag.store(true, Ordering::SeqCst);
+            debug!("Set orchestrator is_recording = true");
+        }
+
         self.debug_info.add_log("Recording started".to_string());
     }
 
@@ -338,6 +351,12 @@ impl AppState {
     pub fn stop_recording(&mut self) {
         if self.recording_state != RecordingState::Recording {
             return;
+        }
+
+        // Clear the orchestrator's recording flag first
+        if let Some(ref flag) = self.orchestrator_is_recording {
+            flag.store(false, Ordering::SeqCst);
+            debug!("Set orchestrator is_recording = false");
         }
 
         let buffer_len = self.recording_buffer.lock().len();
@@ -354,6 +373,13 @@ impl AppState {
     /// Cancel recording without processing
     pub fn cancel_recording(&mut self) {
         self.recording_state = RecordingState::Idle;
+
+        // Clear the orchestrator's recording flag
+        if let Some(ref flag) = self.orchestrator_is_recording {
+            flag.store(false, Ordering::SeqCst);
+            debug!("Set orchestrator is_recording = false (cancelled)");
+        }
+
         self.recording_buffer.lock().clear();
         self.waveform_data.clear();
         self.debug_info.add_log("Recording cancelled".to_string());

@@ -177,6 +177,11 @@ impl OrchestratorHandle {
         self.is_recording.load(Ordering::SeqCst)
     }
 
+    /// Get the recording flag for direct control
+    pub fn recording_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.is_recording)
+    }
+
     /// Get the recording buffer for visualization
     pub fn recording_buffer(&self) -> Arc<Mutex<Vec<f32>>> {
         Arc::clone(&self.recording_buffer)
