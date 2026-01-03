@@ -2,11 +2,15 @@
 //!
 //! This module contains the main BabbleApp that implements eframe::App.
 
+use crate::integration::{IntegrationConfig, Orchestrator, OrchestratorHandle};
 use crate::ui::components::{AudioPlayer, DebugPanel, InputBar, MessageList, Waveform};
 use crate::ui::state::AppState;
 use crate::ui::theme::Theme;
 use egui::{self, CentralPanel, TopBottomPanel, SidePanel, RichText};
+use std::sync::Arc;
+use std::thread::JoinHandle;
 use std::time::Instant;
+use tracing::{error, info};
 
 /// Main Babble application
 pub struct BabbleApp {
@@ -18,6 +22,12 @@ pub struct BabbleApp {
     last_frame_time: Instant,
     /// Whether the app has been initialized
     initialized: bool,
+    /// Orchestrator handle for backend communication
+    orchestrator_handle: Option<Arc<OrchestratorHandle>>,
+    /// Worker thread handles
+    worker_handles: Vec<JoinHandle<()>>,
+    /// Backend initialization error
+    backend_error: Option<String>,
 }
 
 impl BabbleApp {
@@ -34,6 +44,9 @@ impl BabbleApp {
             theme,
             last_frame_time: Instant::now(),
             initialized: false,
+            orchestrator_handle: None,
+            worker_handles: Vec::new(),
+            backend_error: None,
         }
     }
 
@@ -42,9 +55,47 @@ impl BabbleApp {
         if self.initialized {
             return;
         }
+        self.initialized = true;
 
         self.state.debug_info.add_log("Babble UI initialized".to_string());
-        self.initialized = true;
+
+        // Try to initialize the orchestrator
+        match self.initialize_orchestrator() {
+            Ok(()) => {
+                info!("Backend initialized successfully");
+                self.state.debug_info.add_log("Backend connected".to_string());
+            }
+            Err(e) => {
+                error!("Failed to initialize backend: {}", e);
+                self.backend_error = Some(e.clone());
+                self.state.debug_info.add_log(format!("Backend error: {}", e));
+            }
+        }
+    }
+
+    /// Initialize the orchestrator and connect to app state
+    fn initialize_orchestrator(&mut self) -> Result<(), String> {
+        // Create configuration (text-only mode for now since models may not be available)
+        let config = IntegrationConfig::default()
+            .without_audio_input()
+            .without_audio_output();
+
+        // Create orchestrator
+        let (orchestrator, handle) = Orchestrator::new(config)
+            .map_err(|e| format!("Failed to create orchestrator: {}", e))?;
+
+        // Connect state to orchestrator
+        self.state.connect_orchestrator(&handle);
+
+        // Store handle
+        self.orchestrator_handle = Some(Arc::new(handle));
+
+        // Start the orchestrator
+        let handles = orchestrator.start()
+            .map_err(|e| format!("Failed to start orchestrator: {}", e))?;
+        self.worker_handles = handles;
+
+        Ok(())
     }
 
     /// Show the top header bar
@@ -186,5 +237,17 @@ impl eframe::App for BabbleApp {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         // Cleanup on exit
         self.state.debug_info.add_log("Babble shutting down".to_string());
+        info!("Babble shutting down");
+
+        // Shutdown orchestrator via LLM command (sends shutdown signal)
+        if let Some(tx) = &self.state.llm_command_tx {
+            let _ = tx.send(crate::llm::LLMCommand::Shutdown);
+        }
+
+        // Wait for worker threads to finish (with timeout)
+        for handle in self.worker_handles.drain(..) {
+            // Give threads a moment to shutdown gracefully
+            let _ = handle.join();
+        }
     }
 }

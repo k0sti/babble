@@ -2,6 +2,7 @@
 //!
 //! This module provides the central state for the Babble UI.
 
+use crate::integration::OrchestratorHandle;
 use crate::llm::{LLMCommand, LLMEvent};
 use crate::messages::{AudioData, Message, MessageContent, MessageStorage, Sender};
 use crate::speech::tts::{TTSCommand, TTSEvent, AudioQueue};
@@ -259,6 +260,21 @@ impl AppState {
         }
     }
 
+    /// Initialize the state with an orchestrator handle
+    ///
+    /// This connects the UI state to the backend pipelines.
+    pub fn connect_orchestrator(&mut self, handle: &OrchestratorHandle) {
+        self.llm_command_tx = Some(handle.llm_command_sender());
+        self.llm_event_rx = Some(handle.llm_event_receiver());
+        self.tts_command_tx = Some(handle.tts_command_sender());
+        self.tts_event_rx = Some(handle.tts_event_receiver());
+        self.transcription_rx = Some(handle.transcription_receiver());
+        self.audio_tx = Some(handle.audio_sender());
+        self.recording_buffer = handle.recording_buffer();
+
+        self.debug_info.add_log("Connected to orchestrator".to_string());
+    }
+
     /// Update FPS calculation
     pub fn update_fps(&mut self, delta_time: f64) {
         self.frame_times.push_back(delta_time);
@@ -385,27 +401,54 @@ impl AppState {
             }
         }
 
-        // Poll TTS events
-        if let Some(rx) = &self.tts_event_rx {
+        // Poll TTS events - collect first then process
+        let tts_events: Vec<TTSEvent> = if let Some(rx) = &self.tts_event_rx {
+            let mut events = Vec::new();
             while let Ok(event) = rx.try_recv() {
-                match event {
-                    TTSEvent::Audio(audio) => {
-                        self.tts_queue.enqueue(audio);
-                        self.debug_info.tts_queue_status = format!(
-                            "Queue: {} segments, {:.1}s",
-                            self.tts_queue.len(),
-                            self.tts_queue.total_duration_secs()
-                        );
-                    }
-                    TTSEvent::Error { error, segment_index, request_id: _ } => {
-                        let msg = format!("TTS Error (segment {:?}): {}", segment_index, error);
-                        self.debug_info.add_log(msg);
-                    }
-                    TTSEvent::Shutdown => {
-                        self.debug_info.add_log("TTS pipeline shutdown".to_string());
+                events.push(event);
+            }
+            events
+        } else {
+            Vec::new()
+        };
+
+        // Process TTS events
+        let mut should_start_playback = false;
+        for event in tts_events {
+            match event {
+                TTSEvent::Audio(audio) => {
+                    let duration = audio.duration_secs();
+                    self.tts_queue.enqueue(audio);
+                    self.debug_info.tts_queue_status = format!(
+                        "Queue: {} segments, {:.1}s",
+                        self.tts_queue.len(),
+                        self.tts_queue.total_duration_secs()
+                    );
+                    self.debug_info.add_log(format!("TTS audio received: {:.2}s", duration));
+
+                    // Mark for playback if idle
+                    if self.audio_player.state == PlaybackState::Stopped {
+                        should_start_playback = true;
                     }
                 }
+                TTSEvent::Error { error, segment_index, request_id: _ } => {
+                    let msg = format!("TTS Error (segment {:?}): {}", segment_index, error);
+                    self.debug_info.add_log(msg);
+                }
+                TTSEvent::Shutdown => {
+                    self.debug_info.add_log("TTS pipeline shutdown".to_string());
+                }
             }
+        }
+
+        // Start playback if needed
+        if should_start_playback && !self.tts_queue.is_empty() {
+            self.start_tts_playback();
+        }
+
+        // Process TTS playback if playing
+        if self.audio_player.state == PlaybackState::Playing {
+            self.process_tts_playback();
         }
 
         // Poll transcription results - collect first, then process
@@ -480,6 +523,55 @@ impl AppState {
         self.messages.clear();
         if let Some(tx) = &self.llm_command_tx {
             let _ = tx.send(LLMCommand::ClearContext);
+        }
+    }
+
+    /// Start TTS playback from the queue
+    fn start_tts_playback(&mut self) {
+        // Get the next audio segment from the queue
+        if let Some(audio) = self.tts_queue.dequeue() {
+            let audio_data = AudioData {
+                samples: audio.samples,
+                sample_rate: audio.sample_rate,
+                channels: 1, // TTS output is mono
+            };
+
+            self.audio_player.current_audio = Some(audio_data);
+            self.audio_player.playback_position = 0;
+            self.audio_player.state = PlaybackState::Playing;
+
+            self.debug_info.add_log(format!(
+                "Started TTS playback: {:.2}s",
+                self.audio_player.total_time()
+            ));
+        }
+    }
+
+    /// Process TTS playback (advance position, handle completion)
+    fn process_tts_playback(&mut self) {
+        if let Some(audio) = &self.audio_player.current_audio {
+            // Calculate how many samples to advance per frame
+            // Assuming ~60 FPS, we need to advance by sample_rate/60 samples per frame
+            let samples_per_frame = audio.sample_rate / 60;
+            self.audio_player.playback_position += samples_per_frame as usize;
+
+            // Check if playback is complete
+            if self.audio_player.playback_position >= audio.samples.len() {
+                // Playback complete, try to get next segment
+                self.audio_player.current_audio = None;
+                self.audio_player.playback_position = 0;
+
+                // Check if there's more audio in the queue
+                if !self.tts_queue.is_empty() {
+                    self.start_tts_playback();
+                } else {
+                    self.audio_player.state = PlaybackState::Stopped;
+                    self.debug_info.add_log("TTS playback complete".to_string());
+                }
+            }
+        } else {
+            // No audio, stop playback
+            self.audio_player.state = PlaybackState::Stopped;
         }
     }
 }

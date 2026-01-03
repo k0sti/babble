@@ -24,26 +24,17 @@ pub fn write_wav<P: AsRef<Path>>(
     };
 
     let mut writer = WavWriter::create(path.as_ref(), spec)
-        .map_err(|e| BabbleError::IOError(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to create WAV writer: {}", e),
-        )))?;
+        .map_err(|e| BabbleError::IOError(format!("Failed to create WAV writer: {}", e)))?;
 
     // Convert f32 samples to i16
     for &sample in samples {
         let sample_i16 = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
         writer.write_sample(sample_i16)
-            .map_err(|e| BabbleError::IOError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to write sample: {}", e),
-            )))?;
+            .map_err(|e| BabbleError::IOError(format!("Failed to write sample: {}", e)))?;
     }
 
     writer.finalize()
-        .map_err(|e| BabbleError::IOError(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to finalize WAV file: {}", e),
-        )))?;
+        .map_err(|e| BabbleError::IOError(format!("Failed to finalize WAV file: {}", e)))?;
 
     info!("Wrote {} samples to WAV file: {:?}", samples.len(), path.as_ref());
     Ok(())
@@ -58,10 +49,7 @@ pub fn write_wav<P: AsRef<Path>>(
 /// * Tuple of (samples, sample_rate, channels)
 pub fn read_wav<P: AsRef<Path>>(path: P) -> Result<(Vec<f32>, u32, u16)> {
     let mut reader = WavReader::open(path.as_ref())
-        .map_err(|e| BabbleError::IOError(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to open WAV file: {}", e),
-        )))?;
+        .map_err(|e| BabbleError::IOError(format!("Failed to open WAV file: {}", e)))?;
 
     let spec = reader.spec();
     let sample_rate = spec.sample_rate;
@@ -77,10 +65,7 @@ pub fn read_wav<P: AsRef<Path>>(path: P) -> Result<(Vec<f32>, u32, u16)> {
         SampleFormat::Float => {
             reader
                 .samples::<f32>()
-                .map(|s| s.map_err(|e| BabbleError::IOError(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to read sample: {}", e),
-                ))))
+                .map(|s| s.map_err(|e| BabbleError::IOError(format!("Failed to read sample: {}", e))))
                 .collect()
         }
         SampleFormat::Int => {
@@ -90,10 +75,7 @@ pub fn read_wav<P: AsRef<Path>>(path: P) -> Result<(Vec<f32>, u32, u16)> {
                         .samples::<i16>()
                         .map(|s| {
                             s.map(|sample| sample as f32 / i16::MAX as f32)
-                                .map_err(|e| BabbleError::IOError(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    format!("Failed to read sample: {}", e),
-                                )))
+                                .map_err(|e| BabbleError::IOError(format!("Failed to read sample: {}", e)))
                         })
                         .collect()
                 }
@@ -102,10 +84,7 @@ pub fn read_wav<P: AsRef<Path>>(path: P) -> Result<(Vec<f32>, u32, u16)> {
                         .samples::<i32>()
                         .map(|s| {
                             s.map(|sample| sample as f32 / 8388608.0) // 2^23
-                                .map_err(|e| BabbleError::IOError(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    format!("Failed to read sample: {}", e),
-                                )))
+                                .map_err(|e| BabbleError::IOError(format!("Failed to read sample: {}", e)))
                         })
                         .collect()
                 }
@@ -114,10 +93,7 @@ pub fn read_wav<P: AsRef<Path>>(path: P) -> Result<(Vec<f32>, u32, u16)> {
                         .samples::<i32>()
                         .map(|s| {
                             s.map(|sample| sample as f32 / i32::MAX as f32)
-                                .map_err(|e| BabbleError::IOError(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    format!("Failed to read sample: {}", e),
-                                )))
+                                .map_err(|e| BabbleError::IOError(format!("Failed to read sample: {}", e)))
                         })
                         .collect()
                 }
