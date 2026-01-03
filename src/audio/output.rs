@@ -4,7 +4,7 @@ use cpal::{Device, Stream, StreamConfig};
 use crossbeam_channel::Receiver;
 use std::sync::Arc;
 use parking_lot::Mutex;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 pub struct AudioOutput {
     device: Device,

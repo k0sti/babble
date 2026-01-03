@@ -42,6 +42,7 @@ impl TTSSegment {
 
 /// Parser state for tracking marker boundaries
 #[derive(Clone, Debug, PartialEq)]
+#[allow(dead_code)] // MaybeOpenTag and MaybeCloseTag reserved for future state machine enhancements
 enum ParserState {
     /// Outside of any [SPEAK] tags
     Outside,

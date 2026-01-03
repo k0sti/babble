@@ -4,6 +4,7 @@
 
 use crate::llm::{LLMCommand, LLMEvent};
 use crate::messages::AudioData;
+use crate::speech::tts::{TTSCommand, TTSEvent};
 use crossbeam_channel::{bounded, Receiver, Sender};
 
 /// Channels for audio data flow
@@ -53,9 +54,13 @@ pub struct ProcessingChannels {
     pub llm_event_tx: Sender<LLMEvent>,
     pub llm_event_rx: Receiver<LLMEvent>,
 
-    /// Text segments for TTS synthesis
-    pub tts_request_tx: Sender<String>,
-    pub tts_request_rx: Receiver<String>,
+    /// Commands to TTS pipeline
+    pub tts_command_tx: Sender<TTSCommand>,
+    pub tts_command_rx: Receiver<TTSCommand>,
+
+    /// Events from TTS pipeline
+    pub tts_event_tx: Sender<TTSEvent>,
+    pub tts_event_rx: Receiver<TTSEvent>,
 }
 
 impl ProcessingChannels {
@@ -64,7 +69,8 @@ impl ProcessingChannels {
         let (transcription_tx, transcription_rx) = bounded(buffer_size);
         let (llm_command_tx, llm_command_rx) = bounded(buffer_size);
         let (llm_event_tx, llm_event_rx) = bounded(buffer_size);
-        let (tts_request_tx, tts_request_rx) = bounded(buffer_size);
+        let (tts_command_tx, tts_command_rx) = bounded(buffer_size);
+        let (tts_event_tx, tts_event_rx) = bounded(buffer_size);
 
         Self {
             transcription_tx,
@@ -73,8 +79,10 @@ impl ProcessingChannels {
             llm_command_rx,
             llm_event_tx,
             llm_event_rx,
-            tts_request_tx,
-            tts_request_rx,
+            tts_command_tx,
+            tts_command_rx,
+            tts_event_tx,
+            tts_event_rx,
         }
     }
 }
@@ -150,7 +158,8 @@ mod tests {
         // Verify all channels are accessible
         let _ = &channels.audio.raw_audio_tx;
         let _ = &channels.processing.llm_command_tx;
-        let _ = &channels.processing.tts_request_tx;
+        let _ = &channels.processing.tts_command_tx;
+        let _ = &channels.processing.tts_event_tx;
     }
 
     #[test]

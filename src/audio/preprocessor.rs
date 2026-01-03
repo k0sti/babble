@@ -1,5 +1,5 @@
 use crate::audio::resampler::AudioResampler;
-use crate::{BabbleError, Result};
+use crate::Result;
 use tracing::debug;
 
 /// Audio preprocessor for preparing audio for speech recognition

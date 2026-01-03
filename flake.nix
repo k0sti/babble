@@ -27,6 +27,11 @@
         buildInputs = with pkgs; [
           # Audio libraries for cpal
           alsa-lib
+          alsa-lib.dev
+
+          # TTS dependencies for piper-rs/sherpa-rs
+          espeak-ng
+          sonic
 
           # Additional dependencies that might be needed
           openssl

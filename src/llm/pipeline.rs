@@ -8,11 +8,11 @@ use crate::llm::context::ConversationContext;
 use crate::llm::inference::LLMEngine;
 use crate::llm::prompts::SYSTEM_PROMPT;
 use crate::llm::tts_parser::{TTSParser, TTSSegment};
-use crate::{BabbleError, Result};
+use crate::Result;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use std::time::Instant;
 use tokio::runtime::Runtime;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 /// Commands that can be sent to the LLM pipeline
@@ -185,8 +185,7 @@ impl LLMPipeline {
                         tts_parser.reset();
 
                         let start_time = Instant::now();
-                        let mut first_token_time: Option<Instant> = None;
-                        let mut full_response = String::new();
+                        let full_response: String;
 
                         // Get messages for inference
                         let messages = context.get_messages();
@@ -201,11 +200,6 @@ impl LLMPipeline {
                                 .generate_stream(
                                     &messages,
                                     Box::new(move |token| {
-                                        // Record first token time
-                                        if first_token_time.is_none() {
-                                            // Can't mutate from closure, handle differently
-                                        }
-
                                         // Send token event
                                         let _ = event_tx_clone.send(LLMEvent::Token {
                                             token: token.to_string(),

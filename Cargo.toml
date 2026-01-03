@@ -18,8 +18,8 @@ whisper-rs = "0.12"
 # Voice Activity Detection
 voice_activity_detector = "0.2"
 
-# Text-to-Speech - will be implemented in Phase 5
-# piper-rs will be added later
+# Text-to-Speech
+sherpa-rs = { git = "https://github.com/thewh1teagle/sherpa-rs.git", features = ["tts"] }
 
 # Audio
 cpal = { version = "0.15", optional = true }

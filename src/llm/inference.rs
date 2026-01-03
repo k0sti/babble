@@ -5,14 +5,13 @@
 use crate::llm::config::{LLMConfig, QuantizationType};
 use crate::llm::context::{ConversationMessage, MessageRole};
 use crate::{BabbleError, Result};
-use futures::StreamExt;
 use mistralrs::{
-    IsqType, PagedAttentionMetaBuilder, RequestMessage, Response, TextMessageRole, TextMessages,
-    TextModelBuilder,
+    ChatCompletionChunkResponse, ChunkChoice, Delta, IsqType, PagedAttentionMetaBuilder,
+    Response, TextMessageRole, TextMessages, TextModelBuilder,
 };
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// Callback type for streaming token reception
 pub type TokenCallback = Box<dyn FnMut(&str) -> bool + Send>;
@@ -110,8 +109,8 @@ impl LLMEngine {
     ) -> Result<String> {
         let text_messages = self.build_messages(messages)?;
 
-        // Create a channel for streaming responses
-        let (tx, mut rx) = mpsc::channel::<Response>(100);
+        // Create a channel for streaming text chunks
+        let (tx, mut rx) = mpsc::channel::<String>(100);
 
         let model = self.model.clone();
 
@@ -120,8 +119,23 @@ impl LLMEngine {
             match model.stream_chat_request(text_messages).await {
                 Ok(mut stream) => {
                     while let Some(response) = stream.next().await {
-                        if tx.send(response).await.is_err() {
-                            break;
+                        // Match on the Response enum variant for streaming chunks
+                        if let Response::Chunk(ChatCompletionChunkResponse { choices, .. }) =
+                            response
+                        {
+                            // Extract content from the first choice's delta
+                            if let Some(ChunkChoice {
+                                delta: Delta {
+                                    content: Some(content),
+                                    ..
+                                },
+                                ..
+                            }) = choices.first()
+                            {
+                                if tx.send(content.clone()).await.is_err() {
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
@@ -133,23 +147,13 @@ impl LLMEngine {
 
         // Collect tokens
         let mut full_response = String::new();
-        let mut should_continue = true;
 
-        while let Some(response) = rx.recv().await {
-            if !should_continue {
+        while let Some(token) = rx.recv().await {
+            full_response.push_str(&token);
+
+            // Call the callback with the new token
+            if !on_token(&token) {
                 break;
-            }
-
-            // Extract delta content from streaming response
-            if let Some(choice) = response.choices.first() {
-                if let Some(delta) = &choice.delta {
-                    if let Some(content) = &delta.content {
-                        full_response.push_str(content);
-
-                        // Call the callback with the new token
-                        should_continue = on_token(content);
-                    }
-                }
             }
         }
 
