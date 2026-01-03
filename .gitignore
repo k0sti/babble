@@ -1,4 +1,3 @@
 target
-
-# Auto Claude data directory
 .auto-claude/
+.direnv
