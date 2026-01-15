@@ -26,6 +26,7 @@ cpal = { version = "0.15", optional = true }
 rubato = "0.15"
 hound = "3.5"
 ringbuf = "0.4"
+rodio = "0.19"
 
 # GUI
 eframe = { version = "0.30", default-features = false, features = ["default_fonts", "glow", "x11", "wayland", "accesskit"] }
