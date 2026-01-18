@@ -1,0 +1,35 @@
+[package]
+name = "proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Voice-controlled LLM assistant with real-time speech processing"
+
+[[bin]]
+name = "proto"
+path = "src/main.rs"
+
+[dependencies]
+# Core dependencies from app crate
+tokio = { version = "1.42", features = ["full"] }
+crossbeam-channel = "0.5"
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+parking_lot = "0.12"
+
+# Audio (from record crate)
+cpal = "0.15"
+hound = "3.5"
+ringbuf = "0.4"
+
+# GUI
+eframe = { version = "0.30", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+egui = "0.30"
+
+# Re-export from app crate for shared types
+babble = { path = "../app" }
+
+[features]
+default = []

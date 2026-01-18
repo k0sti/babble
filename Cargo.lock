@@ -5578,6 +5578,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "proto"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "babble",
+ "cpal",
+ "crossbeam-channel",
+ "eframe 0.30.0",
+ "egui 0.30.0",
+ "hound",
+ "parking_lot",
+ "ringbuf",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "pulp"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
