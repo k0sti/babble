@@ -1,0 +1,1 @@
+seed/obsidian/AGENTS.md
