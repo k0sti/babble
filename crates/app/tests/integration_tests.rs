@@ -3,8 +3,8 @@
 //! These tests verify the end-to-end integration of all components.
 
 use babble::integration::{IntegrationConfig, Orchestrator, OrchestratorCommand, OrchestratorEvent};
-use babble::llm::{LLMCommand, LLMEvent};
-use babble::speech::tts::{TTSCommand, TTSEvent};
+use babble::llm::LLMCommand;
+use babble::speech::tts::TTSCommand;
 use std::time::Duration;
 use uuid::Uuid;
 
