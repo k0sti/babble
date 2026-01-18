@@ -1,5 +1,5 @@
 [package]
-name = "audio-recorder-example"
+name = "recorder"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,7 +13,7 @@ anyhow = "1.0"
 rodio = "0.19"
 
 [[bin]]
-name = "audio-recorder-example"
+name = "recorder"
 path = "src/main.rs"
 
 [[bin]]
