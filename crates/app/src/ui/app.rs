@@ -5,7 +5,7 @@
 use crate::integration::{IntegrationConfig, Orchestrator, OrchestratorCommand, OrchestratorHandle};
 use crate::speech::tts::TTSCommand;
 use crate::audio::input::AudioInput;
-use crate::ui::components::{AudioPlayer, DebugPanel, InputBar, MessageList, Waveform};
+use crate::ui::components::{AudioPlayer, DebugPanel, InputBar, MessageList, StatusBar, Waveform};
 use crate::ui::state::AppState;
 use crate::ui::theme::Theme;
 use egui::{self, CentralPanel, RichText, SidePanel, TopBottomPanel};
@@ -263,6 +263,11 @@ impl BabbleApp {
                             .size(14.0)
                             .color(self.theme.text_muted),
                     );
+
+                    ui.add_space(16.0);
+
+                    // Status indicators for processors
+                    StatusBar::new(&self.state, &self.theme).show(ui);
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // Settings button

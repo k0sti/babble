@@ -7,9 +7,11 @@ mod audio_player;
 mod waveform;
 mod input_bar;
 mod debug_panel;
+mod status_bar;
 
 pub use message_list::MessageList;
 pub use audio_player::AudioPlayer;
 pub use waveform::Waveform;
 pub use input_bar::InputBar;
 pub use debug_panel::DebugPanel;
+pub use status_bar::{StatusBar, CompactStatusBar, ProcessorStatus, StatusIndicator};
