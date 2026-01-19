@@ -12,3 +12,6 @@ pub mod ui;
 
 // Re-export error types
 pub use error::{ProtoError, Result};
+
+// Re-export audio types
+pub use audio::{AudioDeviceInfo, AudioRecorder, AudioRingBuffer, RecordingState};
