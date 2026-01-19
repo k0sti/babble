@@ -10,6 +10,9 @@ name = "proto"
 path = "src/main.rs"
 
 [dependencies]
+# LLM
+mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git" }
+
 # Core dependencies from app crate
 tokio = { version = "1.42", features = ["full"] }
 crossbeam-channel = "0.5"

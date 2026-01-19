@@ -5588,6 +5588,7 @@ dependencies = [
  "eframe 0.30.0",
  "egui 0.30.0",
  "hound",
+ "mistralrs",
  "parking_lot",
  "ringbuf",
  "thiserror 1.0.69",

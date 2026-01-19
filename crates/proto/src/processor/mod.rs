@@ -1,9 +1,14 @@
-//! Speech-to-text and message processing module
+//! Processing modules for proto application
 //!
-//! This module handles the processing pipeline from audio to text,
-//! including speech-to-text transcription and message handling.
+//! This module contains the processing pipeline components:
+//! - LLM inference with streaming support
+//! - Speech-to-text transcription (TODO)
+//! - Audio preprocessing (TODO)
 
-// TODO: Implement speech processing
-// - STT integration with whisper
-// - Audio preprocessing
-// - Transcription result handling
+pub mod llm;
+
+// Re-export commonly used types
+pub use llm::{
+    ConversationContext, LLMCommand, LLMConfig, LLMEvent, LLMHandle, LLMRunner, Message,
+    MessageRole,
+};
