@@ -31,6 +31,10 @@ pub struct Theme {
     /// Recording indicator color
     pub recording: Color32,
 
+    /// Waveform colors
+    pub waveform_active: Color32,
+    pub waveform_inactive: Color32,
+
     /// Border radius for buttons
     pub button_rounding: Rounding,
     /// Border radius for cards/panels
@@ -70,6 +74,9 @@ impl Theme {
 
             recording: Color32::from_rgb(239, 68, 68), // Red
 
+            waveform_active: Color32::from_rgb(99, 102, 241),  // Indigo (matches primary)
+            waveform_inactive: Color32::from_rgb(75, 85, 99),  // Gray
+
             button_rounding: Rounding::same(8.0),
             card_rounding: Rounding::same(12.0),
 
@@ -97,6 +104,9 @@ impl Theme {
             text_muted: Color32::from_rgb(107, 114, 128), // Medium gray
 
             recording: Color32::from_rgb(220, 38, 38), // Red
+
+            waveform_active: Color32::from_rgb(79, 70, 229),   // Indigo (matches primary)
+            waveform_inactive: Color32::from_rgb(156, 163, 175), // Gray
 
             button_rounding: Rounding::same(8.0),
             card_rounding: Rounding::same(12.0),
