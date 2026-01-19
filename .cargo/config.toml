@@ -1,0 +1,3 @@
+[build]
+# Share build artifacts. Good for worktrees.
+rustc-wrapper = "sccache"
