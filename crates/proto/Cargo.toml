@@ -35,6 +35,9 @@ egui = "0.30"
 toml = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 
+# Filesystem paths
+dirs = "5.0"
+
 # Re-export from app crate for shared types
 babble = { path = "../app" }
 

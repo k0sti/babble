@@ -52,6 +52,13 @@ impl AppState {
         self.recording_state = RecordingState::Processing;
     }
 
+    /// Complete processing and return to idle
+    pub fn finish_processing(&mut self) {
+        if self.recording_state == RecordingState::Processing {
+            self.recording_state = RecordingState::Idle;
+        }
+    }
+
     /// Cancel recording without processing
     pub fn cancel_recording(&mut self) {
         self.recording_state = RecordingState::Idle;

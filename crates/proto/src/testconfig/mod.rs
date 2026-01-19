@@ -83,6 +83,25 @@ pub enum Assertion {
     },
     /// Assert that the audio buffer is not empty
     AudioBufferNotEmpty,
+    /// Assert that the STT processor is in a specific phase
+    SttPhase {
+        /// Expected phase: "idle", "recording", "silence_detected", "transcribing", "detecting_first_word"
+        phase: String,
+    },
+    /// Assert that at least N speech chunks have been detected
+    SttSpeechChunksMin {
+        /// Minimum number of speech chunks
+        min_chunks: u64,
+    },
+    /// Assert that a transcription result was received
+    SttHasTranscription,
+    /// Assert that a first word was detected
+    SttHasFirstWord,
+    /// Assert that transcription text contains a substring
+    SttTranscriptionContains {
+        /// Substring to search for (case-insensitive)
+        text: String,
+    },
 }
 
 impl TestConfig {

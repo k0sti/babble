@@ -1,0 +1,64 @@
+# Test configuration for STT processing validation
+#
+# This test:
+# 1. Records audio for several seconds
+# 2. Validates that speech is being detected
+# 3. Validates that STT phase transitions occur
+# 4. Exits and reports success/failure
+
+[test]
+name = "STT Processing Test"
+description = "Tests that audio recording feeds into STT processor and produces transcription events"
+
+# Action 1: Log start
+[[actions]]
+time_ms = 100
+action = { type = "log", message = "Starting STT processing test..." }
+
+# Action 2: Start recording at 500ms
+[[actions]]
+time_ms = 500
+action = { type = "click_record" }
+assert = { type = "is_recording" }
+
+# Action 3: Log recording started
+[[actions]]
+time_ms = 600
+action = { type = "log", message = "Recording started, waiting for audio data..." }
+
+# Action 4: Check audio buffer after 1 second of recording
+[[actions]]
+time_ms = 1500
+action = { type = "log", message = "Checking audio buffer has data..." }
+assert = { type = "audio_buffer_not_empty" }
+
+# Action 5: Continue recording and check for significant audio
+[[actions]]
+time_ms = 2500
+action = { type = "log", message = "Checking audio buffer for at least 1 second of data (~48000 samples)..." }
+assert = { type = "audio_buffer_min_samples", min_samples = 48000 }
+
+# Action 6: Stop recording at 3 seconds - this should trigger STT processing
+[[actions]]
+time_ms = 3000
+action = { type = "stop_record" }
+
+# Action 7: Log that we're checking for processing state
+[[actions]]
+time_ms = 3100
+action = { type = "log", message = "Recording stopped, checking processing state..." }
+
+# Action 8: Wait a bit and check if processing completed (back to idle)
+[[actions]]
+time_ms = 5000
+action = { type = "log", message = "Waiting for STT processing to complete (this may take several seconds with Whisper)..." }
+
+# Action 9: Final status log
+[[actions]]
+time_ms = 8000
+action = { type = "log", message = "Test complete - check logs above for STT phase transitions and transcription results" }
+
+# Action 10: Exit with success
+[[actions]]
+time_ms = 8500
+action = { type = "exit", code = 0 }

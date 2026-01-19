@@ -35,6 +35,32 @@ pub struct AssertionContext {
     pub is_processing: bool,
     pub is_idle: bool,
     pub audio_buffer_samples: usize,
+    /// STT processing phase (as string for flexibility)
+    pub stt_phase: Option<String>,
+    /// Number of speech chunks detected by STT
+    pub stt_speech_chunks: u64,
+    /// Whether a transcription result has been received
+    pub stt_has_transcription: bool,
+    /// Whether a first word has been detected
+    pub stt_has_first_word: bool,
+    /// The last transcription text (if any)
+    pub stt_last_transcription: Option<String>,
+}
+
+impl Default for AssertionContext {
+    fn default() -> Self {
+        Self {
+            is_recording: false,
+            is_processing: false,
+            is_idle: true,
+            audio_buffer_samples: 0,
+            stt_phase: None,
+            stt_speech_chunks: 0,
+            stt_has_transcription: false,
+            stt_has_first_word: false,
+            stt_last_transcription: None,
+        }
+    }
 }
 
 /// Test runner that schedules and executes test actions
@@ -191,6 +217,64 @@ impl TestRunner {
                     AssertionResult::Passed
                 } else {
                     AssertionResult::Failed("Expected audio buffer to not be empty".to_string())
+                }
+            }
+            Assertion::SttPhase { phase } => {
+                if let Some(ref current_phase) = context.stt_phase {
+                    if current_phase.to_lowercase() == phase.to_lowercase() {
+                        AssertionResult::Passed
+                    } else {
+                        AssertionResult::Failed(format!(
+                            "Expected STT phase '{}', got '{}'",
+                            phase, current_phase
+                        ))
+                    }
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected STT phase '{}', but STT is not initialized",
+                        phase
+                    ))
+                }
+            }
+            Assertion::SttSpeechChunksMin { min_chunks } => {
+                if context.stt_speech_chunks >= *min_chunks {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected at least {} speech chunks, got {}",
+                        min_chunks, context.stt_speech_chunks
+                    ))
+                }
+            }
+            Assertion::SttHasTranscription => {
+                if context.stt_has_transcription {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed("Expected transcription result, none received".to_string())
+                }
+            }
+            Assertion::SttHasFirstWord => {
+                if context.stt_has_first_word {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed("Expected first word detection, none received".to_string())
+                }
+            }
+            Assertion::SttTranscriptionContains { text } => {
+                if let Some(ref transcription) = context.stt_last_transcription {
+                    if transcription.to_lowercase().contains(&text.to_lowercase()) {
+                        AssertionResult::Passed
+                    } else {
+                        AssertionResult::Failed(format!(
+                            "Expected transcription to contain '{}', got '{}'",
+                            text, transcription
+                        ))
+                    }
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected transcription containing '{}', but no transcription received",
+                        text
+                    ))
                 }
             }
         };

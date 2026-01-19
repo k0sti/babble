@@ -82,30 +82,62 @@ impl AudioResampler {
             return Ok(Vec::new());
         }
 
-        // Convert interleaved input to planar format (separate channels)
-        let frames = input.len() / self.channels;
-        let mut input_planar = vec![vec![0.0f32; frames]; self.channels];
+        let chunk_size = self.resampler.input_frames_max();
+        let total_frames = input.len() / self.channels;
 
-        for (frame_idx, chunk) in input.chunks(self.channels).enumerate() {
-            for (ch_idx, &sample) in chunk.iter().enumerate() {
-                input_planar[ch_idx][frame_idx] = sample;
+        // Estimate output size
+        let ratio = self.output_rate as f64 / self.input_rate as f64;
+        let estimated_output_frames = (total_frames as f64 * ratio * 1.1) as usize;
+        let mut output = Vec::with_capacity(estimated_output_frames * self.channels);
+
+        // Process in chunks
+        let mut frame_offset = 0;
+        while frame_offset < total_frames {
+            let frames_remaining = total_frames - frame_offset;
+            let frames_to_read = frames_remaining.min(chunk_size);
+
+            // SincFixedIn requires exactly chunk_size frames per call
+            // Pad with zeros if we have fewer frames remaining
+            let mut input_planar = vec![vec![0.0f32; chunk_size]; self.channels];
+
+            for frame_idx in 0..frames_to_read {
+                let src_idx = (frame_offset + frame_idx) * self.channels;
+                for ch_idx in 0..self.channels {
+                    input_planar[ch_idx][frame_idx] = input[src_idx + ch_idx];
+                }
             }
+            // Remaining frames in input_planar are already zero-padded from initialization
+
+            // Process this chunk (None means all channels are active)
+            let output_planar = self.resampler
+                .process(&input_planar, None)
+                .map_err(|e| BabbleError::AudioProcessingError(format!("Resampling failed: {}", e)))?;
+
+            // Convert planar output back to interleaved format
+            // Only take the non-padded portion on the last chunk
+            let output_frames = output_planar[0].len();
+            let frames_to_take = if frames_remaining < chunk_size {
+                // Last chunk: only take the proportion of output corresponding to actual input
+                let output_ratio = self.output_rate as f64 / self.input_rate as f64;
+                ((frames_to_read as f64) * output_ratio).ceil() as usize
+            } else {
+                output_frames
+            };
+
+            for frame_idx in 0..frames_to_take.min(output_frames) {
+                for ch_idx in 0..self.channels {
+                    output.push(output_planar[ch_idx][frame_idx]);
+                }
+            }
+
+            frame_offset += frames_to_read;
         }
 
-        // Process the audio
-        let output_planar = self.resampler
-            .process(&input_planar, None)
-            .map_err(|e| BabbleError::AudioProcessingError(format!("Resampling failed: {}", e)))?;
-
-        // Convert planar output back to interleaved format
-        let output_frames = output_planar[0].len();
-        let mut output = vec![0.0f32; output_frames * self.channels];
-
-        for frame_idx in 0..output_frames {
-            for ch_idx in 0..self.channels {
-                output[frame_idx * self.channels + ch_idx] = output_planar[ch_idx][frame_idx];
-            }
-        }
+        debug!(
+            "Resampled {} frames -> {} frames",
+            total_frames,
+            output.len() / self.channels
+        );
 
         Ok(output)
     }

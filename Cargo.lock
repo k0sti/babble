@@ -5585,6 +5585,7 @@ dependencies = [
  "babble",
  "cpal",
  "crossbeam-channel",
+ "dirs 5.0.1",
  "eframe 0.30.0",
  "egui 0.30.0",
  "hound",

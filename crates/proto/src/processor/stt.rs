@@ -89,8 +89,11 @@ pub enum STTEvent {
 /// Commands that can be sent to the STT processor
 #[derive(Debug)]
 pub enum STTCommand {
-    /// Process audio samples (mono, f32, 16kHz)
+    /// Process audio samples (mono, f32, 16kHz) through VAD
     ProcessAudio(Vec<f32>),
+
+    /// Directly transcribe audio without VAD (for batch processing)
+    TranscribeDirect(Vec<f32>),
 
     /// Flush any buffered audio and transcribe
     Flush,
@@ -145,10 +148,17 @@ impl STTProcessor {
         self.event_rx.clone()
     }
 
-    /// Send audio for processing
+    /// Send audio for processing through VAD (streaming mode)
     pub fn send_audio(&self, audio: Vec<f32>) -> Result<()> {
         self.command_tx
             .send(STTCommand::ProcessAudio(audio))
+            .map_err(|e| ProtoError::ChannelError(format!("Failed to send audio: {}", e)))
+    }
+
+    /// Send audio for direct transcription without VAD (batch mode)
+    pub fn transcribe_direct(&self, audio: Vec<f32>) -> Result<()> {
+        self.command_tx
+            .send(STTCommand::TranscribeDirect(audio))
             .map_err(|e| ProtoError::ChannelError(format!("Failed to send audio: {}", e)))
     }
 
@@ -259,6 +269,42 @@ impl STTWorker {
                         }
                     }
                 }
+                Ok(STTCommand::TranscribeDirect(audio)) => {
+                    // Direct transcription without VAD - for batch processing
+                    let duration = audio.len() as f32 / 16000.0;
+                    info!(
+                        "Direct transcription requested: {:.2}s of audio ({} samples)",
+                        duration,
+                        audio.len()
+                    );
+
+                    if duration < 0.1 {
+                        warn!("Audio too short for transcription ({:.2}s)", duration);
+                        continue;
+                    }
+
+                    // Create an audio segment and transcribe directly
+                    let segment = AudioSegment::new(audio, true, 0.0);
+                    match engine.transcribe(&segment) {
+                        Ok(result) => {
+                            info!("Direct transcription result: '{}'", result.text);
+                            if !result.text.trim().is_empty() {
+                                if let Err(e) = self.event_tx.send(STTEvent::Final(result)) {
+                                    error!("Failed to send transcription result: {}", e);
+                                    break;
+                                }
+                            } else {
+                                debug!("Transcription was empty, not sending event");
+                            }
+                        }
+                        Err(e) => {
+                            error!("Direct transcription failed: {}", e);
+                            let _ = self
+                                .event_tx
+                                .send(STTEvent::Error(format!("Transcription failed: {}", e)));
+                        }
+                    }
+                }
                 Ok(STTCommand::Flush) => {
                     if let Some(event) = state.flush(&engine, &self.event_tx) {
                         if let Err(e) = self.event_tx.send(event) {
@@ -284,6 +330,33 @@ impl STTWorker {
     }
 }
 
+/// Processing state for debugging and monitoring
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessingPhase {
+    /// Idle, waiting for speech
+    Idle,
+    /// Recording speech
+    Recording,
+    /// Accumulated silence, may trigger transcription
+    SilenceDetected,
+    /// Transcribing audio
+    Transcribing,
+    /// First word detection in progress
+    DetectingFirstWord,
+}
+
+impl std::fmt::Display for ProcessingPhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProcessingPhase::Idle => write!(f, "IDLE"),
+            ProcessingPhase::Recording => write!(f, "RECORDING"),
+            ProcessingPhase::SilenceDetected => write!(f, "SILENCE_DETECTED"),
+            ProcessingPhase::Transcribing => write!(f, "TRANSCRIBING"),
+            ProcessingPhase::DetectingFirstWord => write!(f, "DETECTING_FIRST_WORD"),
+        }
+    }
+}
+
 /// Internal state for audio processing with VAD-based segmentation
 struct ProcessingState {
     /// Accumulated audio buffer
@@ -304,10 +377,23 @@ struct ProcessingState {
     min_segment_duration: f32,
     max_segment_duration: f32,
     silence_threshold: f32,
+
+    /// Current processing phase for debugging
+    phase: ProcessingPhase,
+
+    /// Total audio chunks processed
+    chunks_processed: u64,
+
+    /// Total speech chunks detected
+    speech_chunks: u64,
 }
 
 impl ProcessingState {
     fn new(min_segment_duration: f32, max_segment_duration: f32, silence_threshold: f32) -> Self {
+        info!(
+            "ProcessingState initialized: min_segment={:.2}s, max_segment={:.2}s, silence_threshold={:.2}s",
+            min_segment_duration, max_segment_duration, silence_threshold
+        );
         Self {
             audio_buffer: Vec::new(),
             buffer_start_time: 0.0,
@@ -318,6 +404,23 @@ impl ProcessingState {
             min_segment_duration,
             max_segment_duration,
             silence_threshold,
+            phase: ProcessingPhase::Idle,
+            chunks_processed: 0,
+            speech_chunks: 0,
+        }
+    }
+
+    fn set_phase(&mut self, new_phase: ProcessingPhase) {
+        if self.phase != new_phase {
+            debug!(
+                "Phase transition: {} -> {} (chunks: {}, speech_chunks: {}, buffer: {:.2}s)",
+                self.phase,
+                new_phase,
+                self.chunks_processed,
+                self.speech_chunks,
+                self.audio_buffer.len() as f32 / 16000.0
+            );
+            self.phase = new_phase;
         }
     }
 
@@ -332,26 +435,45 @@ impl ProcessingState {
         engine: &WhisperEngine,
         event_tx: &Sender<STTEvent>,
     ) -> Option<STTEvent> {
+        self.chunks_processed += 1;
         let chunk_duration = audio.len() as f32 / 16000.0;
         self.current_time += chunk_duration as f64;
+
+        // Log every 50 chunks (~1.6s at 32ms chunks) for monitoring
+        if self.chunks_processed % 50 == 0 {
+            info!(
+                "STT Stats: phase={}, chunks={}, speech_chunks={}, buffer={:.2}s, time={:.2}s",
+                self.phase,
+                self.chunks_processed,
+                self.speech_chunks,
+                self.audio_buffer.len() as f32 / 16000.0,
+                self.current_time
+            );
+        }
 
         // Run VAD on the audio chunk
         let is_speech = match vad.is_speech(audio) {
             Ok(speech) => speech,
             Err(e) => {
-                warn!("VAD error: {}", e);
+                warn!("VAD error at chunk {}: {}", self.chunks_processed, e);
                 false
             }
         };
 
         if is_speech {
+            self.speech_chunks += 1;
+
             if !self.is_in_speech {
                 // Transition from silence to speech
                 self.is_in_speech = true;
                 self.buffer_start_time = self.current_time - chunk_duration as f64;
                 self.audio_buffer.clear();
                 self.first_word_sent = false;
-                debug!("Speech started at {:.2}s", self.buffer_start_time);
+                self.set_phase(ProcessingPhase::Recording);
+                info!(
+                    "Speech STARTED at {:.2}s (chunk {})",
+                    self.buffer_start_time, self.chunks_processed
+                );
             }
 
             // Accumulate audio
@@ -363,34 +485,63 @@ impl ProcessingState {
                 let segment_duration = self.audio_buffer.len() as f32 / 16000.0;
                 // Try first word detection after ~500ms of speech
                 if segment_duration >= 0.5 {
+                    self.set_phase(ProcessingPhase::DetectingFirstWord);
+                    debug!(
+                        "Attempting first word detection at {:.2}s of speech",
+                        segment_duration
+                    );
                     if let Some(first_word) = self.try_detect_first_word(engine) {
                         self.first_word_sent = true;
+                        info!("First word detected: '{}'", first_word);
                         let _ = event_tx.send(STTEvent::FirstWord(first_word));
                     }
+                    self.set_phase(ProcessingPhase::Recording);
                 }
             }
 
             // Check if segment is too long
             let segment_duration = self.audio_buffer.len() as f32 / 16000.0;
             if segment_duration >= self.max_segment_duration {
-                debug!("Maximum segment duration reached, triggering transcription");
-                return self.transcribe_buffer(engine);
+                info!(
+                    "Max segment duration ({:.2}s) reached, triggering transcription",
+                    self.max_segment_duration
+                );
+                self.set_phase(ProcessingPhase::Transcribing);
+                let result = self.transcribe_buffer(engine);
+                self.set_phase(ProcessingPhase::Idle);
+                return result;
             }
         } else if self.is_in_speech {
             // In speech but current chunk is silence
             self.audio_buffer.extend_from_slice(audio);
             self.silence_duration += chunk_duration;
+            self.set_phase(ProcessingPhase::SilenceDetected);
+
+            debug!(
+                "Silence during speech: {:.2}s / {:.2}s threshold",
+                self.silence_duration, self.silence_threshold
+            );
 
             // Check if we've had enough silence to end the segment
             if self.silence_duration >= self.silence_threshold {
                 let segment_duration = self.audio_buffer.len() as f32 / 16000.0;
 
                 if segment_duration >= self.min_segment_duration {
-                    debug!("Silence threshold reached, triggering transcription");
-                    return self.transcribe_buffer(engine);
+                    info!(
+                        "Silence threshold ({:.2}s) reached after {:.2}s of speech, triggering transcription",
+                        self.silence_threshold, segment_duration
+                    );
+                    self.set_phase(ProcessingPhase::Transcribing);
+                    let result = self.transcribe_buffer(engine);
+                    self.set_phase(ProcessingPhase::Idle);
+                    return result;
                 } else {
-                    debug!("Segment too short ({:.2}s), discarding", segment_duration);
+                    debug!(
+                        "Segment too short ({:.2}s < {:.2}s min), discarding",
+                        segment_duration, self.min_segment_duration
+                    );
                     self.reset();
+                    self.set_phase(ProcessingPhase::Idle);
                 }
             }
         }
@@ -400,13 +551,27 @@ impl ProcessingState {
 
     /// Flush any buffered audio and transcribe
     fn flush(&mut self, engine: &WhisperEngine, _event_tx: &Sender<STTEvent>) -> Option<STTEvent> {
+        let segment_duration = self.audio_buffer.len() as f32 / 16000.0;
+        info!(
+            "Flush requested: buffer={:.2}s, is_in_speech={}",
+            segment_duration, self.is_in_speech
+        );
+
         if !self.audio_buffer.is_empty() {
-            let segment_duration = self.audio_buffer.len() as f32 / 16000.0;
             if segment_duration >= self.min_segment_duration {
-                return self.transcribe_buffer(engine);
+                self.set_phase(ProcessingPhase::Transcribing);
+                let result = self.transcribe_buffer(engine);
+                self.set_phase(ProcessingPhase::Idle);
+                return result;
+            } else {
+                debug!(
+                    "Flush: segment too short ({:.2}s < {:.2}s), discarding",
+                    segment_duration, self.min_segment_duration
+                );
             }
         }
         self.reset();
+        self.set_phase(ProcessingPhase::Idle);
         None
     }
 
@@ -416,14 +581,23 @@ impl ProcessingState {
             return None;
         }
 
+        let segment_duration = self.audio_buffer.len() as f32 / 16000.0;
+        debug!(
+            "Attempting first word detection on {:.2}s of audio",
+            segment_duration
+        );
+
         // Create a segment from current buffer
         let segment = AudioSegment::new(self.audio_buffer.clone(), true, self.buffer_start_time);
 
         // Transcribe
         match engine.transcribe(&segment) {
-            Ok(result) => detect_first_word(&result.text),
+            Ok(result) => {
+                debug!("First word detection transcription: '{}'", result.text);
+                detect_first_word(&result.text)
+            }
             Err(e) => {
-                debug!("First word detection transcription error: {}", e);
+                warn!("First word detection transcription error: {}", e);
                 None
             }
         }
@@ -432,9 +606,17 @@ impl ProcessingState {
     /// Transcribe the buffered audio
     fn transcribe_buffer(&mut self, engine: &WhisperEngine) -> Option<STTEvent> {
         if self.audio_buffer.is_empty() {
+            debug!("Transcribe called with empty buffer, skipping");
             self.reset();
             return None;
         }
+
+        let segment_duration = self.audio_buffer.len() as f32 / 16000.0;
+        info!(
+            "Starting transcription of {:.2}s audio segment ({} samples)",
+            segment_duration,
+            self.audio_buffer.len()
+        );
 
         let segment = AudioSegment::new(
             std::mem::take(&mut self.audio_buffer),
@@ -442,22 +624,38 @@ impl ProcessingState {
             self.buffer_start_time,
         );
 
+        let start_time = std::time::Instant::now();
         let result = match engine.transcribe(&segment) {
             Ok(r) => r,
             Err(e) => {
-                warn!("Transcription error: {}", e);
+                error!(
+                    "Transcription FAILED after {:.2}s: {}",
+                    start_time.elapsed().as_secs_f32(),
+                    e
+                );
                 self.reset();
                 return Some(STTEvent::Error(e.to_string()));
             }
         };
 
-        debug!("Final transcription: '{}'", result.text);
+        let elapsed = start_time.elapsed().as_secs_f32();
+        info!(
+            "Transcription COMPLETE in {:.2}s: '{}' (RTF: {:.2}x)",
+            elapsed,
+            result.text,
+            elapsed / segment_duration
+        );
         self.reset();
         Some(STTEvent::Final(result))
     }
 
     /// Reset state after transcription
     fn reset(&mut self) {
+        debug!(
+            "Resetting state (was: is_in_speech={}, buffer={:.2}s)",
+            self.is_in_speech,
+            self.audio_buffer.len() as f32 / 16000.0
+        );
         self.audio_buffer.clear();
         self.is_in_speech = false;
         self.silence_duration = 0.0;

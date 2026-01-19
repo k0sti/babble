@@ -92,6 +92,24 @@ impl AudioRingBuffer {
     pub fn capacity(&self) -> usize {
         self.buffer.lock().capacity().get()
     }
+
+    /// Read all samples from the buffer
+    ///
+    /// # Returns
+    /// A Vec containing all samples currently in the buffer
+    pub fn read_all(&self) -> Vec<f32> {
+        let mut buffer = self.buffer.lock();
+        let len = buffer.occupied_len();
+        let mut samples = Vec::with_capacity(len);
+
+        for _ in 0..len {
+            if let Some(sample) = buffer.try_pop() {
+                samples.push(sample);
+            }
+        }
+
+        samples
+    }
 }
 
 #[cfg(test)]

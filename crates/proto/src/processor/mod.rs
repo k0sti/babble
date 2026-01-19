@@ -13,4 +13,4 @@ pub use llm::{
     ConversationContext, LLMCommand, LLMConfig, LLMEvent, LLMHandle, LLMRunner, Message,
     MessageRole,
 };
-pub use stt::{STTCommand, STTConfig, STTEvent, STTProcessor, STTWorker};
+pub use stt::{ProcessingPhase, STTCommand, STTConfig, STTEvent, STTProcessor, STTWorker};

@@ -126,12 +126,16 @@ impl AudioRecorder {
                     let count = sample_count_clone
                         .fetch_add(samples.len(), Ordering::Relaxed);
 
+                    // Calculate max amplitude for debugging
+                    let max_amp = samples.iter().map(|s| s.abs()).fold(0.0f32, |a, b| a.max(b));
+
                     // Log approximately every second of audio
                     if count % (sample_rate as usize) < samples.len() {
                         debug!(
-                            "Audio captured: {} samples ({:.1}s)",
+                            "Audio captured: {} samples ({:.1}s), max_amp={:.4}",
                             count + samples.len(),
-                            (count + samples.len()) as f32 / sample_rate as f32
+                            (count + samples.len()) as f32 / sample_rate as f32,
+                            max_amp
                         );
                     }
 
@@ -165,6 +169,12 @@ impl AudioRecorder {
         self.is_recording.store(false, Ordering::SeqCst);
 
         if let Some(stream) = self.stream.take() {
+            // Pause the stream first to stop callbacks
+            if let Err(e) = stream.pause() {
+                warn!("Failed to pause stream: {}", e);
+            }
+            // Small delay to ensure callbacks are flushed
+            std::thread::sleep(std::time::Duration::from_millis(50));
             drop(stream);
             info!("Audio recording stopped");
         }

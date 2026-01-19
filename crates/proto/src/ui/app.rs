@@ -3,12 +3,16 @@
 //! This module contains the main ProtoApp that implements eframe::App.
 
 use crate::audio::{AudioRecorder, AudioRingBuffer};
+use crate::processor::{STTConfig, STTEvent, STTProcessor};
 use crate::testconfig::{AssertionContext, AssertionResult, TestCommand, TestConfig, TestRunner};
 use crate::ui::components::record_button::StandaloneRecordButton;
 use crate::ui::state::AppState;
 use crate::ui::theme::Theme;
+use babble::audio::resampler::resample_audio;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use egui::{CentralPanel, RichText};
+use std::path::PathBuf;
+use std::thread::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 /// Main Proto application
@@ -23,6 +27,8 @@ pub struct ProtoApp {
     test_runner: Option<TestRunner>,
     /// Audio recorder
     audio_recorder: Option<AudioRecorder>,
+    /// Audio sample rate (from recorder)
+    audio_sample_rate: u32,
     /// Channel for receiving audio samples
     audio_rx: Option<Receiver<Vec<f32>>>,
     /// Channel for sending audio samples (kept to give to recorder)
@@ -31,6 +37,16 @@ pub struct ProtoApp {
     audio_buffer: AudioRingBuffer,
     /// Exit code requested by test (if any)
     pending_exit: Option<i32>,
+    /// STT processor for speech-to-text
+    stt_processor: Option<STTProcessor>,
+    /// STT worker thread handle
+    stt_worker_handle: Option<JoinHandle<()>>,
+    /// Last transcription text
+    last_transcription: Option<String>,
+    /// Whether we've received a first word
+    has_first_word: bool,
+    /// Whether we've received a transcription
+    has_transcription: bool,
 }
 
 impl ProtoApp {
@@ -51,20 +67,24 @@ impl ProtoApp {
         let audio_buffer = AudioRingBuffer::new(48000 * 5);
 
         // Try to create audio recorder
-        let audio_recorder = match AudioRecorder::new() {
+        let (audio_recorder, audio_sample_rate) = match AudioRecorder::new() {
             Ok(recorder) => {
+                let rate = recorder.sample_rate();
                 info!(
                     "[AUDIO] Recorder initialized: {}Hz, {} channels",
-                    recorder.sample_rate(),
+                    rate,
                     recorder.channels()
                 );
-                Some(recorder)
+                (Some(recorder), rate)
             }
             Err(e) => {
                 warn!("[AUDIO] Failed to initialize recorder: {}", e);
-                None
+                (None, 48000) // Default fallback
             }
         };
+
+        // Initialize STT processor
+        let (stt_processor, stt_worker_handle) = Self::init_stt();
 
         Self {
             initialized: false,
@@ -72,10 +92,82 @@ impl ProtoApp {
             theme,
             test_runner,
             audio_recorder,
+            audio_sample_rate,
             audio_rx: Some(audio_rx),
             audio_tx: Some(audio_tx),
             audio_buffer,
             pending_exit: None,
+            stt_processor,
+            stt_worker_handle,
+            last_transcription: None,
+            has_first_word: false,
+            has_transcription: false,
+        }
+    }
+
+    /// Initialize the STT processor and worker
+    fn init_stt() -> (Option<STTProcessor>, Option<JoinHandle<()>>) {
+        // Look for whisper model in common locations
+        let model_paths = [
+            PathBuf::from("models/ggml-base.en.bin"),
+            PathBuf::from("../models/ggml-base.en.bin"),
+            PathBuf::from("../../models/ggml-base.en.bin"),
+            dirs::data_dir()
+                .map(|p| p.join("whisper/ggml-base.en.bin"))
+                .unwrap_or_default(),
+            dirs::home_dir()
+                .map(|p| p.join(".cache/whisper/ggml-base.en.bin"))
+                .unwrap_or_default(),
+        ];
+
+        let model_path = model_paths.iter().find(|p| p.exists());
+
+        let model_path = match model_path {
+            Some(p) => {
+                info!("[STT] Found Whisper model at: {:?}", p);
+                p.clone()
+            }
+            None => {
+                warn!(
+                    "[STT] Whisper model not found. Tried: {:?}",
+                    model_paths
+                        .iter()
+                        .filter(|p| !p.as_os_str().is_empty())
+                        .collect::<Vec<_>>()
+                );
+                warn!("[STT] STT will be disabled. Download a model to enable speech recognition.");
+                return (None, None);
+            }
+        };
+
+        let config = STTConfig {
+            model_path,
+            language: Some("en".to_string()),
+            n_threads: 4,
+            min_segment_duration: 0.3,
+            max_segment_duration: 30.0,
+            silence_threshold: 0.5,
+            vad_threshold: 0.5,
+        };
+
+        match STTProcessor::new(config) {
+            Ok((processor, worker)) => {
+                // Start the worker thread
+                match worker.start() {
+                    Ok(handle) => {
+                        info!("[STT] Processor initialized and worker started");
+                        (Some(processor), Some(handle))
+                    }
+                    Err(e) => {
+                        error!("[STT] Failed to start worker: {}", e);
+                        (None, None)
+                    }
+                }
+            }
+            Err(e) => {
+                error!("[STT] Failed to initialize processor: {}", e);
+                (None, None)
+            }
         }
     }
 
@@ -119,6 +211,39 @@ impl ProtoApp {
         }
     }
 
+    /// Process STT events from the worker
+    fn process_stt_events(&mut self) {
+        if let Some(ref processor) = self.stt_processor {
+            while let Some(event) = processor.try_recv_event() {
+                match event {
+                    STTEvent::FirstWord(word) => {
+                        info!("[STT] First word detected: '{}'", word);
+                        self.has_first_word = true;
+                    }
+                    STTEvent::Partial(text) => {
+                        debug!("[STT] Partial transcription: '{}'", text);
+                    }
+                    STTEvent::Final(result) => {
+                        info!("[STT] Final transcription: '{}'", result.text);
+                        self.last_transcription = Some(result.text);
+                        self.has_transcription = true;
+                        // Processing complete, return to idle
+                        self.state.finish_processing();
+                    }
+                    STTEvent::Error(err) => {
+                        error!("[STT] Error: {}", err);
+                        // On error, return to idle
+                        self.state.finish_processing();
+                    }
+                    STTEvent::Shutdown => {
+                        warn!("[STT] Worker shut down unexpectedly");
+                        self.state.finish_processing();
+                    }
+                }
+            }
+        }
+    }
+
     /// Start recording audio
     fn start_recording(&mut self) {
         if self.state.is_recording() {
@@ -129,6 +254,9 @@ impl ProtoApp {
         // Clear the audio buffer for new recording
         self.audio_buffer.clear();
         self.state.waveform_data.clear();
+        self.has_first_word = false;
+        self.has_transcription = false;
+        self.last_transcription = None;
 
         if let Some(ref mut recorder) = self.audio_recorder {
             if let Some(tx) = self.audio_tx.clone() {
@@ -152,7 +280,7 @@ impl ProtoApp {
         }
     }
 
-    /// Stop recording audio
+    /// Stop recording audio and send to STT
     fn stop_recording(&mut self) {
         if !self.state.is_recording() {
             debug!("[AUDIO] Not recording, ignoring stop request");
@@ -172,6 +300,76 @@ impl ProtoApp {
             "[AUDIO] Recording stopped, buffer contains {} samples",
             sample_count
         );
+
+        // Send audio to STT processor
+        if let Some(ref processor) = self.stt_processor {
+            if sample_count > 0 {
+                // Read audio from buffer (already mono from recorder)
+                let audio_samples = self.audio_buffer.read_all();
+                let input_rate = self.audio_sample_rate;
+
+                // Calculate audio statistics for debugging
+                let max_amplitude = audio_samples
+                    .iter()
+                    .map(|s| s.abs())
+                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .unwrap_or(0.0);
+                let rms = (audio_samples.iter().map(|s| s * s).sum::<f32>()
+                    / audio_samples.len() as f32)
+                    .sqrt();
+
+                info!(
+                    "[STT] Preparing audio: {} samples at {}Hz ({:.2}s), max={:.4}, rms={:.4}",
+                    audio_samples.len(),
+                    input_rate,
+                    audio_samples.len() as f32 / input_rate as f32,
+                    max_amplitude,
+                    rms
+                );
+
+                // Resample to 16kHz for Whisper (audio is already mono)
+                match resample_audio(&audio_samples, input_rate, 16000, 1) {
+                    Ok(audio_16khz) => {
+                        // Calculate resampled audio statistics
+                        let max_16k = audio_16khz
+                            .iter()
+                            .map(|s| s.abs())
+                            .max_by(|a, b| a.partial_cmp(b).unwrap())
+                            .unwrap_or(0.0);
+                        let rms_16k = (audio_16khz.iter().map(|s| s * s).sum::<f32>()
+                            / audio_16khz.len() as f32)
+                            .sqrt();
+
+                        info!(
+                            "[STT] Resampled to {} samples at 16kHz ({:.2}s), max={:.4}, rms={:.4}",
+                            audio_16khz.len(),
+                            audio_16khz.len() as f32 / 16000.0,
+                            max_16k,
+                            rms_16k
+                        );
+
+                        // Send directly for transcription (bypass VAD for batch mode)
+                        if let Err(e) = processor.transcribe_direct(audio_16khz) {
+                            error!("[STT] Failed to send audio: {}", e);
+                            self.state.finish_processing();
+                        } else {
+                            info!("[STT] Audio sent for transcription...");
+                        }
+                    }
+                    Err(e) => {
+                        error!("[STT] Failed to resample audio: {}", e);
+                        self.state.finish_processing();
+                    }
+                }
+            } else {
+                info!("[STT] No audio to process");
+                self.state.finish_processing();
+            }
+        } else {
+            // No STT processor available
+            info!("[AUDIO] STT not available, returning to idle state");
+            self.state.finish_processing();
+        }
     }
 
     /// Cancel recording without processing
@@ -236,6 +434,11 @@ impl ProtoApp {
                     is_processing: self.state.is_processing(),
                     is_idle: !self.state.is_recording() && !self.state.is_processing(),
                     audio_buffer_samples: self.audio_buffer.len(),
+                    stt_phase: None, // TODO: expose phase from STT processor
+                    stt_speech_chunks: 0,
+                    stt_has_transcription: self.has_transcription,
+                    stt_has_first_word: self.has_first_word,
+                    stt_last_transcription: self.last_transcription.clone(),
                 };
 
                 if let Some(ref mut runner) = self.test_runner {
@@ -276,11 +479,14 @@ impl eframe::App for ProtoApp {
         // Process audio data
         self.process_audio();
 
+        // Process STT events
+        self.process_stt_events();
+
         // Process test commands (if in test mode)
         self.process_test_commands(ctx);
 
-        // Request repaint continuously if in test mode (for timing accuracy)
-        if self.test_runner.is_some() {
+        // Request repaint continuously if in test mode or processing (for timing accuracy)
+        if self.test_runner.is_some() || self.state.is_processing() {
             ctx.request_repaint();
         }
 
@@ -354,6 +560,16 @@ impl eframe::App for ProtoApp {
                     );
                 }
 
+                // Show last transcription
+                if let Some(ref transcription) = self.last_transcription {
+                    ui.add_space(20.0);
+                    ui.label(
+                        RichText::new(format!("\"{}\"", transcription))
+                            .size(16.0)
+                            .color(self.theme.text_secondary),
+                    );
+                }
+
                 // Keyboard hint
                 ui.add_space(20.0);
                 ui.label(
@@ -361,7 +577,31 @@ impl eframe::App for ProtoApp {
                         .size(12.0)
                         .color(self.theme.text_muted.gamma_multiply(0.7)),
                 );
+
+                // STT status
+                if self.stt_processor.is_none() {
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new("(STT disabled - no Whisper model found)")
+                            .size(11.0)
+                            .color(self.theme.warning.gamma_multiply(0.8)),
+                    );
+                }
             });
         });
+    }
+}
+
+impl Drop for ProtoApp {
+    fn drop(&mut self) {
+        // Shutdown STT processor gracefully
+        if let Some(ref processor) = self.stt_processor {
+            let _ = processor.shutdown();
+        }
+
+        // Wait for worker to finish
+        if let Some(handle) = self.stt_worker_handle.take() {
+            let _ = handle.join();
+        }
     }
 }
