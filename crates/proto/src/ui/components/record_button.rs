@@ -4,7 +4,7 @@
 
 use crate::ui::state::{AppState, RecordingState};
 use crate::ui::theme::Theme;
-use egui::{Color32, Key, Rect, RichText, Sense, Vec2};
+use egui::{Color32, Rect, RichText, Sense, Vec2};
 
 /// Record button component for voice input
 pub struct RecordButton<'a> {
@@ -203,63 +203,19 @@ impl<'a> RecordButton<'a> {
     }
 
     /// Handle button interactions (click, push-to-talk)
-    fn handle_interactions(&mut self, ui: &egui::Ui, response: &egui::Response) {
-        let is_recording = self.state.recording_state == RecordingState::Recording;
-        let is_processing = self.state.recording_state == RecordingState::Processing;
-
-        // Don't handle interactions when processing
-        if is_processing {
-            return;
-        }
-
-        // Handle click to toggle
-        if response.clicked() {
-            if is_recording {
-                self.state.stop_recording();
-            } else {
-                self.state.start_recording();
-            }
-        }
-
-        // Handle right-click to cancel (when recording)
-        if response.secondary_clicked() && is_recording {
-            self.state.cancel_recording();
-        }
-
-        // Push-to-talk: detect mouse button held
-        let primary_down = ui.input(|i| i.pointer.primary_down());
-        let _pointer_over_button = response.hovered();
-
-        // If button was being held and is now released while recording, stop
-        if is_recording && !primary_down && !response.clicked() {
-            // Only stop if we're in push-to-talk mode (started by holding)
-            // For now, we'll rely on click toggle behavior
-        }
+    /// Note: This does NOT modify state - the caller should check response.clicked()
+    /// and handle state changes at the app level where audio recorder is managed.
+    fn handle_interactions(&mut self, _ui: &egui::Ui, _response: &egui::Response) {
+        // Interactions are now handled by the caller (ProtoApp) to ensure
+        // audio recorder is properly started/stopped along with state changes.
+        // This method is kept for future push-to-talk or other interaction logic.
     }
 
     /// Handle keyboard shortcut (Space to toggle recording)
-    fn handle_keyboard_shortcut(&mut self, ui: &egui::Ui) {
-        let is_recording = self.state.recording_state == RecordingState::Recording;
-        let is_processing = self.state.recording_state == RecordingState::Processing;
-
-        // Don't handle shortcuts when processing
-        if is_processing {
-            return;
-        }
-
-        // Space bar to toggle recording
-        let space_pressed = ui.input(|i| i.key_pressed(Key::Space));
-
-        // Only trigger if no widget has focus (to avoid conflicts with text input)
-        let any_widget_focused = ui.memory(|m| m.focused().is_some());
-
-        if space_pressed && !any_widget_focused {
-            if is_recording {
-                self.state.stop_recording();
-            } else {
-                self.state.start_recording();
-            }
-        }
+    /// Note: This does NOT modify state - keyboard shortcuts are handled at the app level.
+    fn handle_keyboard_shortcut(&mut self, _ui: &egui::Ui) {
+        // Keyboard shortcuts are handled by the caller (ProtoApp) to ensure
+        // audio recorder is properly started/stopped along with state changes.
     }
 
     /// Show tooltip with state info and keyboard hint

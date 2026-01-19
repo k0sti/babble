@@ -309,8 +309,19 @@ impl eframe::App for ProtoApp {
                 // Record button
                 let response = StandaloneRecordButton::new(&mut self.state, &self.theme).show(ui);
 
-                // Handle button clicks (when not in test mode, or allow manual override)
+                // Handle button clicks - must be done here to properly manage audio recorder
                 if response.clicked() {
+                    if self.state.is_recording() {
+                        self.stop_recording();
+                    } else if !self.state.is_processing() {
+                        self.start_recording();
+                    }
+                }
+
+                // Handle keyboard shortcut (Space to toggle recording)
+                let space_pressed = ui.input(|i| i.key_pressed(egui::Key::Space));
+                let any_widget_focused = ui.memory(|m| m.focused().is_some());
+                if space_pressed && !any_widget_focused && !self.state.is_processing() {
                     if self.state.is_recording() {
                         self.stop_recording();
                     } else {
