@@ -3,10 +3,60 @@
 //! Main entry point for the Proto application.
 
 use eframe::egui;
+use proto::testconfig::TestConfig;
 use proto::ui::ProtoApp;
+use std::env;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+/// Command line arguments for Proto
+struct Args {
+    /// Path to test configuration file
+    test_config: Option<String>,
+}
+
+impl Args {
+    fn parse() -> Self {
+        let args: Vec<String> = env::args().collect();
+        let mut test_config = None;
+
+        let mut i = 1;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--test" => {
+                    if i + 1 < args.len() {
+                        test_config = Some(args[i + 1].clone());
+                        i += 2;
+                    } else {
+                        eprintln!("Error: --test requires a path to a test config file");
+                        std::process::exit(1);
+                    }
+                }
+                "-h" | "--help" => {
+                    println!("Proto - Voice-controlled LLM assistant");
+                    println!();
+                    println!("USAGE:");
+                    println!("    proto [OPTIONS]");
+                    println!();
+                    println!("OPTIONS:");
+                    println!("    --test <FILE>    Run predefined tests from a TOML config file");
+                    println!("    -h, --help       Print this help message");
+                    std::process::exit(0);
+                }
+                other => {
+                    eprintln!("Error: Unknown argument '{}'", other);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        Self { test_config }
+    }
+}
+
 fn main() -> eframe::Result<()> {
+    // Parse command line arguments
+    let args = Args::parse();
+
     // Initialize logging
     tracing_subscriber::registry()
         .with(
@@ -17,6 +67,28 @@ fn main() -> eframe::Result<()> {
         .init();
 
     tracing::info!("Starting Proto voice assistant");
+
+    // Load test configuration if specified
+    let test_config = if let Some(path) = args.test_config {
+        tracing::info!("Loading test configuration from: {}", path);
+        match TestConfig::load(&path) {
+            Ok(config) => {
+                tracing::info!(
+                    "Test configuration loaded: {} ({} actions)",
+                    config.test.name,
+                    config.actions.len()
+                );
+                Some(config)
+            }
+            Err(e) => {
+                tracing::error!("Failed to load test configuration: {}", e);
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -29,6 +101,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Proto",
         options,
-        Box::new(|cc| Ok(Box::new(ProtoApp::new(cc)))),
+        Box::new(move |cc| Ok(Box::new(ProtoApp::new(cc, test_config)))),
     )
 }

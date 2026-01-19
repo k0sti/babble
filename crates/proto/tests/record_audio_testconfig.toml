@@ -1,0 +1,45 @@
+# Test configuration for basic audio recording
+#
+# This test:
+# 1. Clicks record at 500ms
+# 2. Records for 2 seconds
+# 3. Checks that audio buffer contains data (at least 48000 samples = 1 second at 48kHz)
+# 4. Exits with success if all assertions pass
+
+[test]
+name = "Basic Audio Recording Test"
+description = "Tests that clicking record captures audio into the buffer"
+
+# Action 1: Start recording at 500ms
+[[actions]]
+time_ms = 500
+action = { type = "log", message = "Starting recording..." }
+
+[[actions]]
+time_ms = 500
+action = { type = "click_record" }
+assert = { type = "is_recording" }
+
+# Action 2: Log progress at 1500ms (1 second into recording)
+[[actions]]
+time_ms = 1500
+action = { type = "log", message = "Recording in progress (1 second elapsed)..." }
+assert = { type = "is_recording" }
+
+# Action 3: Stop recording at 2500ms (after 2 seconds of recording)
+[[actions]]
+time_ms = 2500
+action = { type = "stop_record" }
+
+# Action 4: Check audio buffer at 2600ms (give some time for processing)
+[[actions]]
+time_ms = 2600
+action = { type = "log", message = "Checking audio buffer contains data..." }
+# At 48kHz, 2 seconds should give us ~96000 samples
+# We check for at least 48000 (1 second worth) to be safe with timing
+assert = { type = "audio_buffer_min_samples", min_samples = 48000 }
+
+# Action 5: Exit with success
+[[actions]]
+time_ms = 3000
+action = { type = "exit", code = 0 }

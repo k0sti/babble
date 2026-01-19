@@ -5591,8 +5591,10 @@ dependencies = [
  "mistralrs",
  "parking_lot",
  "ringbuf",
+ "serde",
  "thiserror 1.0.69",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]

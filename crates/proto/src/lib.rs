@@ -8,6 +8,7 @@ pub mod audio;
 pub mod error;
 pub mod message;
 pub mod processor;
+pub mod testconfig;
 pub mod ui;
 
 // Re-export error types
