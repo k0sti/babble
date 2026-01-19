@@ -107,7 +107,10 @@ impl<'a> InputBar<'a> {
 
         // Detect if pointer just pressed on this button
         let pointer_pressed_on_button = ui.input(|i| {
-            i.pointer.primary_pressed() && response.rect.contains(i.pointer.interact_pos().unwrap_or_default())
+            i.pointer.primary_pressed()
+                && response
+                    .rect
+                    .contains(i.pointer.interact_pos().unwrap_or_default())
         });
 
         // Show tooltip (this consumes response if we use on_hover_text)

@@ -2,7 +2,7 @@
 //!
 //! Displays internal state information for debugging.
 
-use crate::ui::state::{AppState, RecordingState, PlaybackState};
+use crate::ui::state::{AppState, PlaybackState, RecordingState};
 use crate::ui::theme::Theme;
 use egui::{self, RichText, ScrollArea};
 
@@ -52,11 +52,23 @@ impl<'a> DebugPanel<'a> {
                             self.stat_row(ui, "Recording", &self.recording_status());
                             self.stat_row(ui, "Playback", &self.playback_status());
                             self.stat_row(ui, "Messages", &self.state.messages.len().to_string());
-                            self.stat_row(ui, "Transcription", &self.state.debug_info.transcription_status);
+                            self.stat_row(
+                                ui,
+                                "Transcription",
+                                &self.state.debug_info.transcription_status,
+                            );
                             self.stat_row(ui, "LLM Stats", &self.state.debug_info.llm_stats);
                             self.stat_row(ui, "TTS Queue", &self.state.debug_info.tts_queue_status);
-                            self.stat_row(ui, "Audio Buffer", &self.state.debug_info.audio_buffer_status);
-                            self.stat_row(ui, "Waveform Samples", &self.state.waveform_data.len().to_string());
+                            self.stat_row(
+                                ui,
+                                "Audio Buffer",
+                                &self.state.debug_info.audio_buffer_status,
+                            );
+                            self.stat_row(
+                                ui,
+                                "Waveform Samples",
+                                &self.state.waveform_data.len().to_string(),
+                            );
                         });
 
                     // Error display
@@ -64,11 +76,7 @@ impl<'a> DebugPanel<'a> {
                         ui.add_space(self.theme.spacing_sm);
                         ui.horizontal(|ui| {
                             ui.label(RichText::new("⚠").color(self.theme.error));
-                            ui.label(
-                                RichText::new(error)
-                                    .size(12.0)
-                                    .color(self.theme.error),
-                            );
+                            ui.label(RichText::new(error).size(12.0).color(self.theme.error));
                         });
                     }
 
@@ -78,9 +86,12 @@ impl<'a> DebugPanel<'a> {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new("Generating:").color(self.theme.text_muted));
                             ui.label(
-                                RichText::new(format!("{} chars", self.state.streaming_response.text.len()))
-                                    .family(egui::FontFamily::Monospace)
-                                    .color(self.theme.primary),
+                                RichText::new(format!(
+                                    "{} chars",
+                                    self.state.streaming_response.text.len()
+                                ))
+                                .family(egui::FontFamily::Monospace)
+                                .color(self.theme.primary),
                             );
                         });
                     }
@@ -127,11 +138,7 @@ impl<'a> DebugPanel<'a> {
     }
 
     fn stat_row(&self, ui: &mut egui::Ui, label: &str, value: &str) {
-        ui.label(
-            RichText::new(label)
-                .size(12.0)
-                .color(self.theme.text_muted),
-        );
+        ui.label(RichText::new(label).size(12.0).color(self.theme.text_muted));
 
         let display_value = if value.is_empty() { "—" } else { value };
 

@@ -2,9 +2,9 @@
 //!
 //! Displays audio waveform for recording and playback visualization.
 
-use crate::ui::state::{AppState, RecordingState, PlaybackState};
+use crate::ui::state::{AppState, PlaybackState, RecordingState};
 use crate::ui::theme::Theme;
-use egui::{self, Vec2, Rect, Pos2, Color32, Stroke};
+use egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 
 /// Waveform visualization component
 pub struct Waveform<'a> {
@@ -91,7 +91,11 @@ impl<'a> Waveform<'a> {
                         _ => self.theme.waveform_inactive,
                     };
 
-                    (samples, color, self.state.audio_player.state == PlaybackState::Playing)
+                    (
+                        samples,
+                        color,
+                        self.state.audio_player.state == PlaybackState::Playing,
+                    )
                 } else {
                     (Vec::new(), self.theme.waveform_inactive, false)
                 }
@@ -171,7 +175,11 @@ impl<'a> Waveform<'a> {
         let dot_radius = 6.0 + pulse * 2.0;
         let dot_center = Pos2::new(rect.left() + 16.0, rect.top() + 16.0);
 
-        painter.circle_filled(dot_center, dot_radius, self.theme.recording.gamma_multiply(pulse * 0.5 + 0.5));
+        painter.circle_filled(
+            dot_center,
+            dot_radius,
+            self.theme.recording.gamma_multiply(pulse * 0.5 + 0.5),
+        );
         painter.circle_filled(dot_center, 4.0, self.theme.recording);
 
         // "Recording" text
@@ -271,11 +279,8 @@ impl<'a> MiniWaveform<'a> {
             let end = (start + samples_per_bar).min(self.samples.len());
 
             // Calculate RMS for this segment
-            let rms: f32 = self.samples[start..end]
-                .iter()
-                .map(|s| s * s)
-                .sum::<f32>()
-                / (end - start) as f32;
+            let rms: f32 =
+                self.samples[start..end].iter().map(|s| s * s).sum::<f32>() / (end - start) as f32;
             let rms = rms.sqrt();
 
             let height = (rms * max_height * 4.0).min(max_height).max(2.0);

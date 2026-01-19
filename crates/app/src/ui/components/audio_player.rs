@@ -4,7 +4,7 @@
 
 use crate::ui::state::{AppState, PlaybackState};
 use crate::ui::theme::Theme;
-use egui::{self, RichText, Vec2, Sense, Rect};
+use egui::{self, Rect, RichText, Sense, Vec2};
 
 /// Audio player component
 pub struct AudioPlayer<'a> {
@@ -46,10 +46,7 @@ impl<'a> AudioPlayer<'a> {
                                 .color(self.theme.text_muted),
                             );
                         } else {
-                            ui.label(
-                                RichText::new("No audio")
-                                    .color(self.theme.text_muted),
-                            );
+                            ui.label(RichText::new("No audio").color(self.theme.text_muted));
                         }
                     });
 
@@ -178,9 +175,14 @@ impl<'a> AudioPlayer<'a> {
                     let hover_progress = (pos.x - rect.left()) / rect.width();
                     let hover_time = hover_progress * self.state.audio_player.total_time();
 
-                    egui::show_tooltip(ui.ctx(), response.layer_id, egui::Id::new("seek_tooltip"), |ui| {
-                        ui.label(format_time(hover_time));
-                    });
+                    egui::show_tooltip(
+                        ui.ctx(),
+                        response.layer_id,
+                        egui::Id::new("seek_tooltip"),
+                        |ui| {
+                            ui.label(format_time(hover_time));
+                        },
+                    );
                 }
             }
         }

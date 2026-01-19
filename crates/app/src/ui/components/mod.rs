@@ -2,16 +2,18 @@
 //!
 //! This module contains all the reusable UI components.
 
-mod message_list;
 mod audio_player;
-mod waveform;
-mod input_bar;
 mod debug_panel;
+mod input_bar;
+mod message_list;
 mod status_bar;
+mod text_display;
+mod waveform;
 
-pub use message_list::MessageList;
 pub use audio_player::AudioPlayer;
-pub use waveform::Waveform;
-pub use input_bar::InputBar;
 pub use debug_panel::DebugPanel;
-pub use status_bar::{StatusBar, CompactStatusBar, ProcessorStatus, StatusIndicator};
+pub use input_bar::InputBar;
+pub use message_list::MessageList;
+pub use status_bar::{CompactStatusBar, ProcessorStatus, StatusBar, StatusIndicator};
+pub use text_display::{StreamingText, TextDisplay};
+pub use waveform::Waveform;

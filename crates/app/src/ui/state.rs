@@ -5,12 +5,12 @@
 use crate::integration::OrchestratorHandle;
 use crate::llm::{LLMCommand, LLMEvent};
 use crate::messages::{AudioData, Message, MessageContent, MessageStorage, Sender};
-use crate::speech::tts::{TTSCommand, TTSEvent, AudioQueue};
+use crate::speech::tts::{AudioQueue, TTSCommand, TTSEvent};
 use crossbeam_channel::{Receiver, Sender as ChannelSender};
 use parking_lot::Mutex;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -167,12 +167,47 @@ pub struct StreamingResponse {
     pub text: String,
     /// Whether generation is in progress
     pub is_generating: bool,
+    /// Whether generation was interrupted before completion
+    pub was_interrupted: bool,
     /// The request ID for this response
     pub request_id: Option<Uuid>,
     /// Time to first token in milliseconds
     pub first_token_ms: Option<u64>,
     /// Total generation time in milliseconds
     pub total_ms: Option<u64>,
+}
+
+impl StreamingResponse {
+    /// Create a new empty streaming response.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Append a token to the response text.
+    pub fn append(&mut self, token: &str) {
+        self.text.push_str(token);
+    }
+
+    /// Mark the response as complete.
+    pub fn complete(&mut self) {
+        self.is_generating = false;
+    }
+
+    /// Interrupt the current generation.
+    pub fn interrupt(&mut self) {
+        self.is_generating = false;
+        self.was_interrupted = true;
+    }
+
+    /// Clear the response and reset state for a new generation.
+    pub fn clear(&mut self) {
+        self.text.clear();
+        self.is_generating = false;
+        self.was_interrupted = false;
+        self.request_id = None;
+        self.first_token_ms = None;
+        self.total_ms = None;
+    }
 }
 
 /// Central application state
@@ -284,9 +319,12 @@ impl AppState {
         self.recording_buffer = handle.recording_buffer();
         self.orchestrator_is_recording = Some(handle.recording_flag());
 
-        info!("Connected to orchestrator - recording_buffer Arc ptr: {:p}",
-              Arc::as_ptr(&self.recording_buffer));
-        self.debug_info.add_log("Connected to orchestrator".to_string());
+        info!(
+            "Connected to orchestrator - recording_buffer Arc ptr: {:p}",
+            Arc::as_ptr(&self.recording_buffer)
+        );
+        self.debug_info
+            .add_log("Connected to orchestrator".to_string());
     }
 
     /// Update FPS calculation
@@ -297,8 +335,13 @@ impl AppState {
         }
 
         if !self.frame_times.is_empty() {
-            let avg_time: f64 = self.frame_times.iter().sum::<f64>() / self.frame_times.len() as f64;
-            self.debug_info.fps = if avg_time > 0.0 { 1.0 / avg_time as f32 } else { 0.0 };
+            let avg_time: f64 =
+                self.frame_times.iter().sum::<f64>() / self.frame_times.len() as f64;
+            self.debug_info.fps = if avg_time > 0.0 {
+                1.0 / avg_time as f32
+            } else {
+                0.0
+            };
         }
     }
 
@@ -324,6 +367,7 @@ impl AppState {
             self.streaming_response = StreamingResponse {
                 text: String::new(),
                 is_generating: true,
+                was_interrupted: false,
                 request_id: Some(request_id),
                 first_token_ms: None,
                 total_ms: None,
@@ -366,7 +410,10 @@ impl AppState {
 
         self.recording_state = RecordingState::Processing;
         self.processing_start_time = Some(Instant::now());
-        self.debug_info.add_log(format!("Recording stopped, processing {} samples...", buffer_len));
+        self.debug_info.add_log(format!(
+            "Recording stopped, processing {} samples...",
+            buffer_len
+        ));
 
         // The transcription will be handled by the audio pipeline
         // When we receive the transcription, we'll send it to the LLM
@@ -394,8 +441,12 @@ impl AppState {
             if let Some(start_time) = self.processing_start_time {
                 let elapsed = start_time.elapsed();
                 if elapsed.as_secs() >= 2 {
-                    warn!("Processing timeout after {:?}, STT not available - returning to idle", elapsed);
-                    self.debug_info.add_log("Processing timeout - STT not available".to_string());
+                    warn!(
+                        "Processing timeout after {:?}, STT not available - returning to idle",
+                        elapsed
+                    );
+                    self.debug_info
+                        .add_log("Processing timeout - STT not available".to_string());
                     self.recording_state = RecordingState::Idle;
                     self.processing_start_time = None;
                 }
@@ -411,13 +462,24 @@ impl AppState {
                             self.streaming_response.text.push_str(&token);
                         }
                     }
-                    LLMEvent::TTSSegment { segment, request_id } => {
+                    LLMEvent::TTSSegment {
+                        segment,
+                        request_id,
+                    } => {
                         // Forward to TTS
                         if let Some(tx) = &self.tts_command_tx {
-                            let _ = tx.send(TTSCommand::Synthesize { segment, request_id });
+                            let _ = tx.send(TTSCommand::Synthesize {
+                                segment,
+                                request_id,
+                            });
                         }
                     }
-                    LLMEvent::Complete { full_response, request_id, first_token_ms, total_ms } => {
+                    LLMEvent::Complete {
+                        full_response,
+                        request_id,
+                        first_token_ms,
+                        total_ms,
+                    } => {
                         if self.streaming_response.request_id == Some(request_id) {
                             self.streaming_response.text = full_response.clone();
                             self.streaming_response.is_generating = false;
@@ -425,12 +487,17 @@ impl AppState {
                             self.streaming_response.total_ms = Some(total_ms);
 
                             // Add assistant message to storage
-                            let msg = Message::new(Sender::Assistant, MessageContent::Text(full_response));
+                            let msg = Message::new(
+                                Sender::Assistant,
+                                MessageContent::Text(full_response),
+                            );
                             self.messages.add(msg);
 
                             // Update debug info
                             let tokens_per_sec = if total_ms > 0 {
-                                (self.streaming_response.text.split_whitespace().count() as f64 * 1000.0) / total_ms as f64
+                                (self.streaming_response.text.split_whitespace().count() as f64
+                                    * 1000.0)
+                                    / total_ms as f64
                             } else {
                                 0.0
                             };
@@ -440,7 +507,10 @@ impl AppState {
                             );
                         }
                     }
-                    LLMEvent::Error { error, request_id: _ } => {
+                    LLMEvent::Error {
+                        error,
+                        request_id: _,
+                    } => {
                         self.last_error = Some(error.clone());
                         self.streaming_response.is_generating = false;
                         self.debug_info.add_log(format!("LLM Error: {}", error));
@@ -475,14 +545,19 @@ impl AppState {
                         self.tts_queue.len(),
                         self.tts_queue.total_duration_secs()
                     );
-                    self.debug_info.add_log(format!("TTS audio received: {:.2}s", duration));
+                    self.debug_info
+                        .add_log(format!("TTS audio received: {:.2}s", duration));
 
                     // Mark for playback if idle
                     if self.audio_player.state == PlaybackState::Stopped {
                         should_start_playback = true;
                     }
                 }
-                TTSEvent::Error { error, segment_index, request_id: _ } => {
+                TTSEvent::Error {
+                    error,
+                    segment_index,
+                    request_id: _,
+                } => {
                     let msg = format!("TTS Error (segment {:?}): {}", segment_index, error);
                     self.debug_info.add_log(msg);
                 }
@@ -516,7 +591,8 @@ impl AppState {
         // Process collected transcriptions
         for transcription in transcriptions {
             self.recording_state = RecordingState::Idle;
-            self.debug_info.transcription_status = format!("Last: \"{}\"",
+            self.debug_info.transcription_status = format!(
+                "Last: \"{}\"",
                 if transcription.len() > 50 {
                     format!("{}...", &transcription[..50])
                 } else {
@@ -537,11 +613,17 @@ impl AppState {
         // Downsample if needed
         if samples.len() > MAX_SAMPLES {
             let step = samples.len() / MAX_SAMPLES;
-            self.waveform_data = samples.iter().step_by(step).take(MAX_SAMPLES).copied().collect();
+            self.waveform_data = samples
+                .iter()
+                .step_by(step)
+                .take(MAX_SAMPLES)
+                .copied()
+                .collect();
         } else {
             self.waveform_data.extend_from_slice(samples);
             if self.waveform_data.len() > MAX_SAMPLES {
-                self.waveform_data.drain(0..self.waveform_data.len() - MAX_SAMPLES);
+                self.waveform_data
+                    .drain(0..self.waveform_data.len() - MAX_SAMPLES);
             }
         }
     }
