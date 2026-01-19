@@ -26,10 +26,8 @@ impl<'a> TextDisplay<'a> {
     }
 
     /// Render the text display component.
-    ///
-    /// Returns the egui Response for the scroll area.
-    pub fn show(self, ui: &mut egui::Ui) -> egui::Response {
-        let response = egui::ScrollArea::vertical()
+    pub fn show(self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .stick_to_bottom(true)
             .show(ui, |ui| {
@@ -101,8 +99,6 @@ impl<'a> TextDisplay<'a> {
                     }
                 });
             });
-
-        response.inner
     }
 
     /// Show a typing indicator (animated dots) when waiting for first token.
