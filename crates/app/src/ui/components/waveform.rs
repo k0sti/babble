@@ -70,10 +70,22 @@ impl<'a> Waveform<'a> {
     fn get_waveform_data(&self) -> (Vec<f32>, Color32, bool) {
         match self.state.recording_state {
             RecordingState::Recording => {
-                (self.state.waveform_data.clone(), self.theme.recording, true)
+                // Use actual waveform data if available, otherwise show placeholder bars
+                let samples = if self.state.waveform_data.is_empty() {
+                    Self::generate_placeholder_waveform()
+                } else {
+                    self.state.waveform_data.clone()
+                };
+                (samples, self.theme.recording, true)
             }
             RecordingState::Processing => {
-                (self.state.waveform_data.clone(), self.theme.warning, false)
+                // Use actual waveform data if available, otherwise show placeholder
+                let samples = if self.state.waveform_data.is_empty() {
+                    Self::generate_placeholder_waveform()
+                } else {
+                    self.state.waveform_data.clone()
+                };
+                (samples, self.theme.warning, false)
             }
             RecordingState::Idle => {
                 // Show playback audio waveform if available
@@ -97,10 +109,37 @@ impl<'a> Waveform<'a> {
                         self.state.audio_player.state == PlaybackState::Playing,
                     )
                 } else {
-                    (Vec::new(), self.theme.waveform_inactive, false)
+                    // Show idle placeholder waveform
+                    (
+                        Self::generate_idle_waveform(),
+                        self.theme.waveform_inactive,
+                        false,
+                    )
                 }
             }
         }
+    }
+
+    /// Generate placeholder waveform bars for recording/processing states
+    fn generate_placeholder_waveform() -> Vec<f32> {
+        // Generate a simple animated-looking waveform pattern
+        (0..50)
+            .map(|i| {
+                let t = i as f32 / 50.0;
+                ((t * std::f32::consts::PI * 4.0).sin() * 0.5 + 0.3).abs()
+            })
+            .collect()
+    }
+
+    /// Generate idle waveform bars (low amplitude, subtle)
+    fn generate_idle_waveform() -> Vec<f32> {
+        // Generate a subtle idle waveform pattern
+        (0..50)
+            .map(|i| {
+                let t = i as f32 / 50.0;
+                ((t * std::f32::consts::PI * 2.0).sin() * 0.1 + 0.15).abs()
+            })
+            .collect()
     }
 
     fn draw_waveform(

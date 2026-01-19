@@ -6,6 +6,7 @@ use crate::audio::{AudioRecorder, AudioRingBuffer};
 use crate::processor::{STTConfig, STTEvent, STTProcessor};
 use crate::testconfig::{AssertionContext, AssertionResult, TestCommand, TestConfig, TestRunner};
 use crate::ui::components::record_button::StandaloneRecordButton;
+use crate::ui::components::waveform::StateWaveform;
 use crate::ui::state::AppState;
 use crate::ui::theme::Theme;
 use babble::audio::resampler::resample_audio;
@@ -512,6 +513,13 @@ impl eframe::App for ProtoApp {
 
                 ui.add_space(60.0);
 
+                // Waveform visualization (always visible)
+                ui.add_space(20.0);
+                StateWaveform::new(&self.state, &self.theme)
+                    .height(60.0)
+                    .show(ui);
+                ui.add_space(20.0);
+
                 // Record button
                 let response = StandaloneRecordButton::new(&mut self.state, &self.theme).show(ui);
 
@@ -535,7 +543,7 @@ impl eframe::App for ProtoApp {
                     }
                 }
 
-                ui.add_space(40.0);
+                ui.add_space(20.0);
 
                 // Status indicator
                 let status_text = match self.state.recording_state {

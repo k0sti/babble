@@ -2,10 +2,14 @@
 //!
 //! This module contains the main BabbleApp that implements eframe::App.
 
-use crate::integration::{IntegrationConfig, Orchestrator, OrchestratorCommand, OrchestratorHandle};
-use crate::speech::tts::TTSCommand;
 use crate::audio::input::AudioInput;
-use crate::ui::components::{AudioPlayer, DebugPanel, InputBar, MessageList, StatusBar, Waveform};
+use crate::integration::{
+    IntegrationConfig, Orchestrator, OrchestratorCommand, OrchestratorHandle,
+};
+use crate::speech::tts::TTSCommand;
+use crate::ui::components::{
+    AudioPlayer, DebugPanel, InputBar, MessageList, StatusBar, TextDisplay, Waveform,
+};
 use crate::ui::state::AppState;
 use crate::ui::theme::Theme;
 use egui::{self, CentralPanel, RichText, SidePanel, TopBottomPanel};
@@ -89,11 +93,15 @@ impl BabbleApp {
         // Initialize audio input
         match AudioInput::new() {
             Ok(audio_input) => {
-                info!("Audio input initialized: {}Hz, {} channels",
-                      audio_input.sample_rate(), audio_input.channels());
-                self.state
-                    .debug_info
-                    .add_log(format!("Audio input ready: {}Hz", audio_input.sample_rate()));
+                info!(
+                    "Audio input initialized: {}Hz, {} channels",
+                    audio_input.sample_rate(),
+                    audio_input.channels()
+                );
+                self.state.debug_info.add_log(format!(
+                    "Audio input ready: {}Hz",
+                    audio_input.sample_rate()
+                ));
                 self.audio_input = Some(audio_input);
             }
             Err(e) => {
@@ -138,7 +146,10 @@ impl BabbleApp {
         let current_state = self.state.recording_state;
 
         if self.prev_recording_state != current_state {
-            info!("Recording state transition: {:?} -> {:?}", self.prev_recording_state, current_state);
+            info!(
+                "Recording state transition: {:?} -> {:?}",
+                self.prev_recording_state, current_state
+            );
 
             match current_state {
                 RecordingState::Recording => {
@@ -164,8 +175,11 @@ impl BabbleApp {
                                 .add_log("Recording started".to_string());
                         }
                     } else {
-                        warn!("Cannot start recording: audio_input={}, audio_tx={}",
-                              self.audio_input.is_some(), self.state.audio_tx.is_some());
+                        warn!(
+                            "Cannot start recording: audio_input={}, audio_tx={}",
+                            self.audio_input.is_some(),
+                            self.state.audio_tx.is_some()
+                        );
                         self.state
                             .debug_info
                             .add_log("Audio input not available".to_string());
@@ -224,7 +238,8 @@ impl BabbleApp {
 
             if !samples.is_empty() {
                 // Log occasionally to avoid spam
-                static LAST_LOG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                static LAST_LOG: std::sync::atomic::AtomicU64 =
+                    std::sync::atomic::AtomicU64::new(0);
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
@@ -232,8 +247,11 @@ impl BabbleApp {
                 let last = LAST_LOG.load(std::sync::atomic::Ordering::Relaxed);
                 if now > last {
                     LAST_LOG.store(now, std::sync::atomic::Ordering::Relaxed);
-                    debug!("Updating waveform with {} samples, waveform_data len: {}",
-                           samples.len(), self.state.waveform_data.len());
+                    debug!(
+                        "Updating waveform with {} samples, waveform_data len: {}",
+                        samples.len(),
+                        self.state.waveform_data.len()
+                    );
                 }
                 self.state.update_waveform(&samples);
             }
@@ -316,18 +334,11 @@ impl BabbleApp {
             )
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
-                    // Waveform visualization (when recording or playing)
-                    let show_waveform = self.state.recording_state
-                        != crate::ui::state::RecordingState::Idle
-                        || self.state.audio_player.state
-                            != crate::ui::state::PlaybackState::Stopped;
-
-                    if show_waveform {
-                        Waveform::new(&self.state, &self.theme)
-                            .height(50.0)
-                            .show(ui);
-                        ui.add_space(self.theme.spacing_sm);
-                    }
+                    // Waveform visualization (always visible per spec layout)
+                    Waveform::new(&self.state, &self.theme)
+                        .height(50.0)
+                        .show(ui);
+                    ui.add_space(self.theme.spacing_sm);
 
                     // Audio player controls (always visible)
                     AudioPlayer::new(&mut self.state, &self.theme).show(ui);
@@ -360,12 +371,45 @@ impl BabbleApp {
             });
     }
 
-    /// Show the main content area (message list)
+    /// Show the main content area (message list and LLM text display)
     fn show_content(&mut self, ctx: &egui::Context) {
         CentralPanel::default()
             .frame(egui::Frame::none().fill(self.theme.bg_primary))
             .show(ctx, |ui| {
-                MessageList::new(&self.state, &self.theme).show(ui);
+                // Split the content area: message history on top, current LLM response below
+                let available_height = ui.available_height();
+
+                // Show message history (takes most of the space)
+                let history_height = available_height * 0.6;
+                ui.allocate_ui_with_layout(
+                    egui::Vec2::new(ui.available_width(), history_height),
+                    egui::Layout::top_down(egui::Align::LEFT),
+                    |ui| {
+                        MessageList::new(&self.state, &self.theme).show(ui);
+                    },
+                );
+
+                ui.add_space(self.theme.spacing_sm);
+
+                // Separator
+                ui.separator();
+
+                ui.add_space(self.theme.spacing_sm);
+
+                // Show current LLM response with prominent display
+                egui::Frame::none()
+                    .fill(self.theme.bg_secondary)
+                    .rounding(self.theme.card_rounding)
+                    .inner_margin(self.theme.spacing)
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new("Response")
+                                .size(12.0)
+                                .color(self.theme.text_muted),
+                        );
+                        ui.add_space(4.0);
+                        TextDisplay::new(&self.state, &self.theme).show(ui);
+                    });
             });
     }
 }

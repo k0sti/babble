@@ -4,7 +4,7 @@
 
 use crate::ui::state::{AppState, RecordingState};
 use crate::ui::theme::Theme;
-use egui::{Color32, Pos2, Rect, Stroke, Vec2};
+use egui::{Color32, Pos2, Rect, Vec2};
 
 /// Waveform visualization component for audio recording
 pub struct Waveform<'a> {
@@ -49,15 +49,8 @@ impl<'a> Waveform<'a> {
             painter.rect_filled(rect, self.theme.card_rounding, self.theme.bg_secondary);
 
             if self.samples.is_empty() {
-                // Show placeholder line when no audio data
-                let center_y = rect.center().y;
-                painter.line_segment(
-                    [
-                        Pos2::new(rect.left() + 8.0, center_y),
-                        Pos2::new(rect.right() - 8.0, center_y),
-                    ],
-                    Stroke::new(1.0, self.theme.waveform_inactive),
-                );
+                // Show placeholder waveform bars when no audio data
+                self.draw_placeholder_waveform(ui, rect);
             } else {
                 // Draw the waveform bars
                 self.draw_waveform(ui, rect);
@@ -75,6 +68,64 @@ impl<'a> Waveform<'a> {
         }
 
         response
+    }
+
+    /// Draw placeholder waveform bars when no audio data is available
+    fn draw_placeholder_waveform(&self, ui: &egui::Ui, rect: Rect) {
+        let painter = ui.painter();
+
+        let padding = 8.0;
+        let draw_rect = rect.shrink(padding);
+        let center_y = draw_rect.center().y;
+        let max_height = draw_rect.height() / 2.0;
+
+        let bar_count = 60;
+        let bar_width = draw_rect.width() / bar_count as f32;
+        let bar_gap = 1.0;
+
+        // Get color based on recording state
+        let base_color = self.color(ui);
+
+        // Animation offset when recording
+        let time_offset = if self.is_recording {
+            ui.ctx().input(|i| i.time)
+        } else {
+            0.0
+        };
+
+        for i in 0..bar_count {
+            let x = draw_rect.left() + i as f32 * bar_width;
+
+            if x + bar_width > draw_rect.right() {
+                break;
+            }
+
+            // Generate animated placeholder pattern
+            let t = i as f32 / bar_count as f32;
+            let amplitude = if self.is_recording {
+                // Animated wave pattern when recording
+                let phase = t * std::f32::consts::PI * 4.0 + time_offset as f32 * 3.0;
+                (phase.sin() * 0.5 + 0.5) * 0.7 + 0.1
+            } else {
+                // Subtle static pattern when idle
+                let phase = t * std::f32::consts::PI * 2.0;
+                (phase.sin() * 0.1 + 0.15).abs()
+            };
+
+            let bar_height = (amplitude * max_height).clamp(2.0, max_height);
+
+            // Draw centered bar
+            let bar_rect = Rect::from_center_size(
+                Pos2::new(x + bar_width / 2.0, center_y),
+                Vec2::new(bar_width - bar_gap, bar_height),
+            );
+
+            // Apply gradient effect
+            let gradient_factor = 1.0 - (t - 0.5).abs() * 0.3;
+            let bar_color = base_color.gamma_multiply(gradient_factor);
+
+            painter.rect_filled(bar_rect, 1.0, bar_color);
+        }
     }
 
     /// Draw the bar-style waveform visualization
