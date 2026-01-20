@@ -13,6 +13,7 @@ pub struct DebugConfig {
 
 use crate::audio::{AudioRecorder, AudioRingBuffer};
 use crate::processor::{OrchestratorHandle, STTConfig, STTEvent, STTProcessor};
+use crate::screenshot;
 use crate::state::SharedAppState;
 use crate::testconfig::{AssertionContext, AssertionResult, TestCommand, TestConfig, TestRunner};
 use crate::ui::components::debug_panel::DebugPanel;
@@ -67,6 +68,8 @@ pub struct ProtoApp {
     debug_config: Option<DebugConfig>,
     /// Orchestrator handle for coordinating STT, message handling, and LLM
     orchestrator: Option<OrchestratorHandle>,
+    /// Whether we've requested an exit-frame screenshot (waiting for it to complete)
+    exit_screenshot_requested: bool,
 }
 
 impl ProtoApp {
@@ -139,6 +142,7 @@ impl ProtoApp {
             debug_panel_open: debug_config.as_ref().is_some_and(|d| d.enabled),
             debug_config,
             orchestrator: None, // Set via set_orchestrator when orchestrator is available
+            exit_screenshot_requested: false,
         }
     }
 
@@ -518,7 +522,7 @@ impl ProtoApp {
                 }
                 TestCommand::Snapshot { name } => {
                     info!("[TEST] Executing: Snapshot with name: {}", name);
-                    // TODO: Capture screenshot to output/<name>.png
+                    screenshot::request_screenshot(ctx, &name);
                 }
                 TestCommand::ReportSuccess => {
                     info!("[TEST] Executing: ReportSuccess");
@@ -579,16 +583,45 @@ impl ProtoApp {
 
 impl eframe::App for ProtoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Handle screenshot completion and exit
+        // This must be checked at the start of each frame to process the screenshot event
+        if self.exit_screenshot_requested {
+            if screenshot::process_screenshot_events(ctx) {
+                info!("[DEBUG] Exit-frame screenshot saved, closing application");
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                return;
+            }
+            // Screenshot not ready yet - this can happen if we're in the same frame as the request
+            // Continue to render UI and wait for next frame
+            ctx.request_repaint();
+        }
+
         // Increment frame counter and check for frame-limited exit
-        {
+        let should_request_screenshot = {
             let mut state = self.shared_state.write();
             state.frame_count += 1;
 
             // Check for frame-limited exit in debug mode
-            if state.max_frames > 0 && state.frame_count >= state.max_frames {
-                info!("[DEBUG] Reached max frames ({}), exiting", state.max_frames);
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            if !self.exit_screenshot_requested
+                && state.max_frames > 0
+                && state.frame_count >= state.max_frames
+            {
+                info!(
+                    "[DEBUG] Reached max frames ({}), will capture exit-frame screenshot",
+                    state.max_frames
+                );
+                true
+            } else {
+                false
             }
+        };
+
+        // Request screenshot outside of lock scope
+        if should_request_screenshot {
+            screenshot::request_screenshot(ctx, "exit-frame");
+            self.exit_screenshot_requested = true;
+            ctx.request_repaint();
+            // Don't return - continue to render the UI so the screenshot captures it
         }
 
         // Initialize on first frame

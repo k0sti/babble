@@ -5590,6 +5590,7 @@ dependencies = [
  "egui 0.30.0",
  "egui_kittest",
  "hound",
+ "image",
  "kittest",
  "mistralrs",
  "parking_lot",
