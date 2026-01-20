@@ -89,6 +89,12 @@ You: [Fix progress indicators]
 - Review before merge
 - Review when stuck
 
+**Vibe-Kanban Integration:**
+- When requesting final review (before merge/PR), optionally update task status:
+  `update_task(task_id, status="inreview")`
+- After review approved, status flows through finishing-a-development-branch
+- Note: Per-task reviews during subagent-driven-development don't update vibe-kanban (too granular)
+
 ## Red Flags
 
 **Never:**

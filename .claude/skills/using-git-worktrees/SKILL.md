@@ -206,6 +206,38 @@ Ready to implement auth feature
 - Auto-detect and run project setup
 - Verify clean test baseline
 
+## Vibe-Kanban Workspace Sessions
+
+**Alternative to manual worktree creation:**
+
+If working on a vibe-kanban task, you can use `start_workspace_session` to:
+- Automatically create workspace linked to task
+- Run repository setup scripts
+- Track workspace in vibe-kanban
+
+```
+# Get repo info first
+repos = list_repos(project_id)
+
+# Start workspace session
+start_workspace_session(
+  task_id="<task-uuid>",
+  executor="CLAUDE_CODE",
+  repos=[{repo_id: "<repo-uuid>", base_branch: "main"}]
+)
+```
+
+**When to use manual worktrees vs vibe-kanban sessions:**
+
+| Situation | Recommendation |
+|-----------|----------------|
+| Quick experiments, no task tracking needed | Manual worktree |
+| Formal task execution with tracking | Vibe-kanban session |
+| Task already exists in vibe-kanban | Vibe-kanban session |
+| No vibe-kanban project configured | Manual worktree |
+
+**Note:** Manual worktrees and vibe-kanban sessions can coexist. Use whichever fits the workflow.
+
 ## Integration
 
 **Called by:**
@@ -215,3 +247,4 @@ Ready to implement auth feature
 **Pairs with:**
 - **finishing-a-development-branch** - REQUIRED for cleanup after work complete
 - **executing-plans** or **subagent-driven-development** - Work happens in this worktree
+- **vibe-kanban** - Alternative workspace creation via `start_workspace_session`

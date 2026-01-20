@@ -94,6 +94,23 @@ git commit -m "feat: add specific feature"
 - Reference relevant skills with @ syntax
 - DRY, YAGNI, TDD, frequent commits
 
+## Vibe-Kanban Integration
+
+**If working on a vibe-kanban task (task_id provided):**
+
+1. **Link plan to task:**
+   - Get task details: `get_task(task_id)`
+   - Update task with plan reference: `update_task(task_id, description="Plan: docs/plans/<filename>.md\n\n<original description>")`
+
+2. **Update task status:**
+   - When plan is written and execution begins: `update_task(task_id, status="inprogress")`
+
+3. **Pass task_id to execution:**
+   - Include task_id when handing off to executing-plans or subagent-driven-development
+   - Those skills will continue tracking against the same task
+
+**Error handling:** If vibe-kanban tools fail, log warning but continue. Vibe-kanban is enhancement, not blocker.
+
 ## Execution Handoff
 
 After saving the plan, offer execution choice:

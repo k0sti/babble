@@ -39,10 +39,15 @@ Start by understanding the current project context, then ask questions one at a 
 - Use elements-of-style:writing-clearly-and-concisely skill if available
 - Commit the design document to git
 
+**Vibe-Kanban Task Creation (if project uses vibe-kanban):**
+- Check if project has vibe-kanban: `list_projects()` to find matching project
+- Create task for the feature: `create_task(project_id, title="<feature-name>", description="Design: docs/plans/YYYY-MM-DD-<topic>-design.md")`
+- Pass task_id to downstream skills (writing-plans, etc.)
+
 **Implementation (if continuing):**
 - Ask: "Ready to set up for implementation?"
 - Use superpowers:using-git-worktrees to create isolated workspace
-- Use superpowers:writing-plans to create detailed implementation plan
+- Use superpowers:writing-plans to create detailed implementation plan (pass task_id if created)
 
 ## Key Principles
 

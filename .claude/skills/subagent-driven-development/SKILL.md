@@ -9,6 +9,27 @@ Execute plan by dispatching fresh subagent per task, with two-stage review after
 
 **Core principle:** Fresh subagent per task + two-stage review (spec then quality) = high quality, fast iteration
 
+## Vibe-Kanban Task Tracking
+
+**If working on a vibe-kanban task (task_id provided):**
+
+1. **At start:**
+   - Verify task: `get_task(task_id)`
+   - Update to `inprogress`: `update_task(task_id, status="inprogress")`
+
+2. **During execution:**
+   - Per-task progress tracked via TodoWrite
+   - Vibe-kanban task status remains `inprogress`
+
+3. **After final code review (before finishing-a-development-branch):**
+   - Update to `inreview`: `update_task(task_id, status="inreview")`
+   - Pass task_id to finishing-a-development-branch skill
+
+4. **After finishing-a-development-branch (merge/PR created):**
+   - finishing-a-development-branch updates to final status (`done` or `cancelled`)
+
+**Error handling:** If vibe-kanban tools fail, log warning but continue. Vibe-kanban is enhancement, not blocker.
+
 ## When to Use
 
 ```dot
@@ -231,10 +252,13 @@ Done!
 **Required workflow skills:**
 - **superpowers:writing-plans** - Creates the plan this skill executes
 - **superpowers:requesting-code-review** - Code review template for reviewer subagents
-- **superpowers:finishing-a-development-branch** - Complete development after all tasks
+- **superpowers:finishing-a-development-branch** - Complete development after all tasks (pass task_id)
 
 **Subagents should use:**
 - **superpowers:test-driven-development** - Subagents follow TDD for each task
 
 **Alternative workflow:**
 - **superpowers:executing-plans** - Use for parallel session instead of same-session execution
+
+**Task tracking:**
+- **vibe-kanban** - Optional task tracking via MCP tools (task_id propagated through workflow)

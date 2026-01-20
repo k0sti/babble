@@ -190,6 +190,33 @@ git worktree remove <worktree-path>
 - Get typed confirmation for Option 4
 - Clean up worktree for Options 1 & 4 only
 
+## Vibe-Kanban Integration
+
+**If working on a vibe-kanban task (task_id passed from upstream skill):**
+
+### Check Task Status (before Step 1)
+
+```
+Verify task exists and status is inprogress or inreview:
+  get_task(task_id)
+```
+
+### Update Status Based on Choice (in Step 4)
+
+| Option | Vibe-Kanban Action |
+|--------|-------------------|
+| 1. Merge locally | `update_task(task_id, status="done")` |
+| 2. Create PR | `update_task(task_id, status="inreview")` + add PR URL to description |
+| 3. Keep as-is | No change (remains `inprogress`) |
+| 4. Discard | `update_task(task_id, status="cancelled")` |
+
+**For Option 2 (PR):** Include PR URL in task:
+```
+update_task(task_id, description="PR: <url>\n\n<original description>")
+```
+
+**Error handling:** If vibe-kanban tools fail, log warning but continue with git operations. Vibe-kanban is enhancement, not blocker.
+
 ## Integration
 
 **Called by:**
@@ -198,3 +225,4 @@ git worktree remove <worktree-path>
 
 **Pairs with:**
 - **using-git-worktrees** - Cleans up worktree created by that skill
+- **vibe-kanban** - Updates task status on completion

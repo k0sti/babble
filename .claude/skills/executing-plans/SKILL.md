@@ -13,6 +13,25 @@ Load plan, review critically, execute tasks in batches, report for review betwee
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
+## Vibe-Kanban Task Tracking
+
+**If executing against a vibe-kanban task (task_id provided):**
+
+1. **At start:**
+   - Verify task exists: `get_task(task_id)`
+   - Confirm task status is `todo` or `inprogress`
+   - Update to `inprogress` if not already: `update_task(task_id, status="inprogress")`
+
+2. **During execution:**
+   - Progress tracked via TodoWrite (local)
+   - No per-step vibe-kanban updates (too noisy)
+
+3. **At completion (before finishing-a-development-branch):**
+   - Update task to `inreview`: `update_task(task_id, status="inreview")`
+   - Pass task_id to finishing-a-development-branch skill
+
+**Error handling:** If vibe-kanban tools fail, log warning but continue execution. Vibe-kanban is enhancement, not blocker.
+
 ## The Process
 
 ### Step 1: Load and Review Plan
@@ -45,9 +64,11 @@ Based on feedback:
 ### Step 5: Complete Development
 
 After all tasks complete and verified:
+- **If vibe-kanban task:** Update status to `inreview`: `update_task(task_id, status="inreview")`
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
+- **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch (pass task_id if available)
 - Follow that skill to verify tests, present options, execute choice
+- **After merge/PR:** finishing-a-development-branch will update task to final status (`done` or `cancelled`)
 
 ## When to Stop and Ask for Help
 
