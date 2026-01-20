@@ -18,6 +18,7 @@ use crate::state::SharedAppState;
 use crate::testconfig::{AssertionResult, TestCommand, TestConfig, TestRunner};
 use crate::ui::components::debug_panel::DebugPanel;
 use crate::ui::components::record_button::StandaloneRecordButton;
+use crate::ui::components::response_display::ResponseDisplay;
 use crate::ui::components::waveform::StateWaveform;
 use crate::ui::state::AppState;
 use crate::ui::theme::Theme;
@@ -692,9 +693,10 @@ impl eframe::App for ProtoApp {
         // Sync local state to shared state for debug panel
         self.sync_shared_state();
 
-        // Request repaint continuously if in test mode, debug mode with max_frames, or processing
+        // Request repaint continuously if in test mode, debug mode with max_frames, processing, or LLM generating
         if self.test_runner.is_some()
             || self.state.is_processing()
+            || self.shared_state.is_generating()
             || self.debug_config.as_ref().is_some_and(|d| d.max_frames > 0)
         {
             ctx.request_repaint();
@@ -797,6 +799,12 @@ impl eframe::App for ProtoApp {
                             .color(self.theme.text_secondary),
                     );
                 }
+
+                // LLM Response display
+                ui.add_space(20.0);
+                ResponseDisplay::new(&self.shared_state, &self.theme)
+                    .max_height(150.0)
+                    .show(ui);
 
                 // Keyboard hint
                 ui.add_space(20.0);
