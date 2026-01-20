@@ -3,9 +3,12 @@
 //! Main entry point for the Proto application.
 
 use eframe::egui;
+use proto::processor::{Orchestrator, OrchestratorConfig};
+use proto::state::SharedAppState;
 use proto::testconfig::TestConfig;
 use proto::ui::{DebugConfig, ProtoApp};
 use std::env;
+use std::thread::JoinHandle;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Command line arguments for Proto
@@ -139,9 +142,37 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
 
+    // Create shared state and orchestrator
+    let shared_state = SharedAppState::new();
+    let orchestrator_config = OrchestratorConfig::default();
+
+    // Create orchestrator with shared state
+    let orchestrator_setup = match Orchestrator::with_state(orchestrator_config, shared_state.clone()) {
+        Ok((orchestrator, handle)) => {
+            // Start orchestrator worker threads
+            match orchestrator.start() {
+                Ok(handles) => {
+                    tracing::info!("Orchestrator started with {} worker threads", handles.len());
+                    // Store handles for cleanup (they'll be dropped when main exits)
+                    // We leak the handles intentionally - they'll be cleaned up on process exit
+                    let _: Vec<JoinHandle<()>> = handles;
+                    Some((shared_state, handle))
+                }
+                Err(e) => {
+                    tracing::error!("Failed to start orchestrator: {}", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to create orchestrator: {}", e);
+            None
+        }
+    };
+
     eframe::run_native(
         "Proto",
         options,
-        Box::new(move |cc| Ok(Box::new(ProtoApp::new(cc, test_config, debug_config)))),
+        Box::new(move |cc| Ok(Box::new(ProtoApp::with_orchestrator(cc, test_config, debug_config, orchestrator_setup)))),
     )
 }

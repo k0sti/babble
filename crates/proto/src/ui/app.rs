@@ -15,7 +15,7 @@ use crate::audio::{AudioRecorder, AudioRingBuffer};
 use crate::processor::{OrchestratorHandle, STTConfig, STTEvent, STTProcessor};
 use crate::screenshot;
 use crate::state::SharedAppState;
-use crate::testconfig::{AssertionContext, AssertionResult, TestCommand, TestConfig, TestRunner};
+use crate::testconfig::{AssertionResult, TestCommand, TestConfig, TestRunner};
 use crate::ui::components::debug_panel::DebugPanel;
 use crate::ui::components::record_button::StandaloneRecordButton;
 use crate::ui::components::waveform::StateWaveform;
@@ -85,6 +85,20 @@ impl ProtoApp {
         test_config: Option<TestConfig>,
         debug_config: Option<DebugConfig>,
     ) -> Self {
+        Self::with_orchestrator(cc, test_config, debug_config, None)
+    }
+
+    /// Create a new Proto application with an optional orchestrator handle
+    ///
+    /// This variant allows passing a pre-configured orchestrator handle to enable
+    /// LLM functionality. The orchestrator should be created with the same
+    /// SharedAppState that this app will use.
+    pub fn with_orchestrator(
+        cc: &eframe::CreationContext<'_>,
+        test_config: Option<TestConfig>,
+        debug_config: Option<DebugConfig>,
+        orchestrator_setup: Option<(SharedAppState, OrchestratorHandle)>,
+    ) -> Self {
         let theme = Theme::dark();
 
         // Apply theme to egui context
@@ -119,8 +133,19 @@ impl ProtoApp {
         // Initialize STT processor
         let (stt_processor, stt_worker_handle) = Self::init_stt();
 
-        // Create shared state with debug config values
-        let shared_state = SharedAppState::new();
+        // Use provided shared state or create a new one
+        let (shared_state, orchestrator) = match orchestrator_setup {
+            Some((state, handle)) => {
+                info!("[APP] Using provided orchestrator and shared state");
+                (state, Some(handle))
+            }
+            None => {
+                let state = SharedAppState::new();
+                (state, None)
+            }
+        };
+
+        // Apply debug config to shared state
         if let Some(ref debug) = debug_config {
             let mut state = shared_state.write();
             state.debug_mode = debug.enabled;
@@ -147,7 +172,7 @@ impl ProtoApp {
             // Open debug panel by default only when debug mode is enabled
             debug_panel_open: debug_config.as_ref().is_some_and(|d| d.enabled),
             debug_config,
-            orchestrator: None, // Set via set_orchestrator when orchestrator is available
+            orchestrator,
             exit_screenshot_requested: false,
             test_failed: false,
             last_recording_sample_count: 0,
@@ -551,29 +576,12 @@ impl ProtoApp {
                 }
             }
 
-            // Check assertion if present
+            // Check assertion if present - use SharedAppState for full state access (including LLM state)
+            // Note: SharedAppState.audio_buffer_samples is synced in sync_shared_state() which
+            // uses last_recording_sample_count when the buffer has been consumed by STT
             if let Some(ref assertion) = assertion {
-                // Use preserved sample count if buffer was consumed by STT
-                let current_samples = self.audio_buffer.len();
-                let audio_samples = if current_samples > 0 {
-                    current_samples
-                } else {
-                    self.last_recording_sample_count
-                };
-                let context = AssertionContext {
-                    is_recording: self.state.is_recording(),
-                    is_processing: self.state.is_processing(),
-                    is_idle: !self.state.is_recording() && !self.state.is_processing(),
-                    audio_buffer_samples: audio_samples,
-                    stt_phase: None, // TODO: expose phase from STT processor
-                    stt_speech_chunks: 0,
-                    stt_has_transcription: self.has_transcription,
-                    stt_has_first_word: self.has_first_word,
-                    stt_last_transcription: self.last_transcription.clone(),
-                };
-
                 if let Some(ref mut runner) = self.test_runner {
-                    let result = runner.check_assertion(assertion, &context);
+                    let result = runner.check_assertion_with_state(assertion, &self.shared_state);
 
                     // If assertion failed and we have a pending exit, change to failure code
                     if matches!(result, AssertionResult::Failed(_)) {
