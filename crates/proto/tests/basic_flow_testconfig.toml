@@ -1,0 +1,72 @@
+# Test configuration for basic end-to-end flow
+#
+# This test validates the complete flow:
+# 1. Record audio
+# 2. STT processes the audio
+# 3. LLM generates a response
+# 4. Response is displayed
+#
+# Prerequisites: Requires A2 (actions) and A3 (assertions) to be completed
+
+[test]
+name = "Basic End-to-End Flow"
+description = "Tests complete flow: record → STT → LLM → response"
+
+[[actions]]
+time_ms = 0
+action = { type = "log", message = "Starting basic flow test" }
+
+[[actions]]
+time_ms = 500
+action = { type = "click_record" }
+assert = { type = "is_recording" }
+
+[[actions]]
+time_ms = 1500
+action = { type = "log", message = "Recording in progress..." }
+assert = { type = "is_recording" }
+
+[[actions]]
+time_ms = 3000
+action = { type = "stop_record" }
+
+[[actions]]
+time_ms = 3500
+action = { type = "log", message = "Checking processing state" }
+assert = { type = "is_processing" }
+
+[[actions]]
+time_ms = 5000
+action = { type = "log", message = "Checking audio buffer" }
+assert = { type = "audio_buffer_min_samples", min_samples = 96000 }
+
+# Wait for STT to complete (adjust timing based on model speed)
+[[actions]]
+time_ms = 15000
+action = { type = "log", message = "Checking STT result" }
+assert = { type = "stt_has_transcription" }
+
+# After transcription, LLM should start
+[[actions]]
+time_ms = 16000
+action = { type = "log", message = "Checking LLM started" }
+assert = { type = "llm_is_generating" }
+
+# Wait for LLM to complete
+[[actions]]
+time_ms = 30000
+action = { type = "log", message = "Checking LLM completed" }
+assert = { type = "llm_is_idle" }
+
+[[actions]]
+time_ms = 30500
+action = { type = "log", message = "Verifying response exists" }
+assert = { type = "llm_response_not_empty" }
+
+[[actions]]
+time_ms = 31000
+action = { type = "snapshot", name = "basic_flow_complete" }
+
+[[actions]]
+time_ms = 31500
+action = { type = "exit", code = 0 }
