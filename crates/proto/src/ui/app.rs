@@ -12,7 +12,7 @@ pub struct DebugConfig {
 }
 
 use crate::audio::{AudioRecorder, AudioRingBuffer};
-use crate::processor::{STTConfig, STTEvent, STTProcessor};
+use crate::processor::{OrchestratorHandle, STTConfig, STTEvent, STTProcessor};
 use crate::state::SharedAppState;
 use crate::testconfig::{AssertionContext, AssertionResult, TestCommand, TestConfig, TestRunner};
 use crate::ui::components::debug_panel::DebugPanel;
@@ -65,6 +65,8 @@ pub struct ProtoApp {
     debug_panel_open: bool,
     /// Debug configuration from CLI
     debug_config: Option<DebugConfig>,
+    /// Orchestrator handle for coordinating STT, message handling, and LLM
+    orchestrator: Option<OrchestratorHandle>,
 }
 
 impl ProtoApp {
@@ -136,7 +138,16 @@ impl ProtoApp {
             // Open debug panel by default only when debug mode is enabled
             debug_panel_open: debug_config.as_ref().is_some_and(|d| d.enabled),
             debug_config,
+            orchestrator: None, // Set via set_orchestrator when orchestrator is available
         }
+    }
+
+    /// Set the orchestrator handle for command routing
+    ///
+    /// This enables test commands like SendText and StopGeneration to
+    /// communicate with the LLM via the orchestrator.
+    pub fn set_orchestrator(&mut self, orchestrator: OrchestratorHandle) {
+        self.orchestrator = Some(orchestrator);
     }
 
     /// Initialize the STT processor and worker
@@ -486,12 +497,24 @@ impl ProtoApp {
                     }
                 }
                 TestCommand::SendText { text } => {
-                    info!("[TEST] Executing: SendText with text: {}", text);
-                    // TODO: Send text directly to LLM when LLM integration is available
+                    info!("[TEST] Executing: SendText '{}'", text);
+                    if let Some(ref orchestrator) = self.orchestrator {
+                        if let Err(e) = orchestrator.send_text(text) {
+                            warn!("[TEST] Failed to send text to orchestrator: {}", e);
+                        }
+                    } else {
+                        warn!("[TEST] SendText: orchestrator not available");
+                    }
                 }
                 TestCommand::StopGeneration => {
                     info!("[TEST] Executing: StopGeneration");
-                    // TODO: Stop LLM generation when LLM integration is available
+                    if let Some(ref orchestrator) = self.orchestrator {
+                        if let Err(e) = orchestrator.stop_generation() {
+                            warn!("[TEST] Failed to stop generation: {}", e);
+                        }
+                    } else {
+                        warn!("[TEST] StopGeneration: orchestrator not available");
+                    }
                 }
                 TestCommand::Snapshot { name } => {
                     info!("[TEST] Executing: Snapshot with name: {}", name);
