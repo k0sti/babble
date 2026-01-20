@@ -14,6 +14,6 @@ pub use audio_player::AudioPlayer;
 pub use debug_panel::DebugPanel;
 pub use input_bar::InputBar;
 pub use message_list::MessageList;
-pub use status_bar::{CompactStatusBar, ProcessorStatus, StatusBar, StatusIndicator};
-pub use text_display::{StreamingText, TextDisplay};
+pub use status_bar::StatusBar;
+pub use text_display::TextDisplay;
 pub use waveform::Waveform;

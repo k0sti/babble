@@ -5,6 +5,7 @@
 
 mod runner;
 
+#[allow(deprecated)]
 pub use runner::{AssertionContext, AssertionResult, TestCommand, TestRunner};
 
 use serde::Deserialize;
