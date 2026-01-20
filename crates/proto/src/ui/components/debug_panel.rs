@@ -55,6 +55,40 @@ impl<'a> DebugPanel<'a> {
                     .spacing([20.0, 4.0])
                     .striped(true)
                     .show(ui, |ui| {
+                        // Frame counter (always show first for easy debugging)
+                        self.state_row(
+                            ui,
+                            "Frame",
+                            &format!("{}", snapshot.frame_count),
+                            self.theme.text_secondary,
+                        );
+
+                        // Debug mode indicator
+                        self.state_row(
+                            ui,
+                            "Debug Mode",
+                            if snapshot.debug_mode { "ON" } else { "OFF" },
+                            Self::bool_color(snapshot.debug_mode, self.theme),
+                        );
+
+                        // Max frames limit (0 = unlimited)
+                        let max_frames_text = if snapshot.max_frames == 0 {
+                            "∞".to_string()
+                        } else {
+                            format!("{}", snapshot.max_frames)
+                        };
+                        self.state_row(
+                            ui,
+                            "Max Frames",
+                            &max_frames_text,
+                            self.theme.text_secondary,
+                        );
+
+                        ui.end_row();
+                        ui.separator();
+                        ui.separator();
+                        ui.end_row();
+
                         // Recording State
                         self.state_row(
                             ui,
@@ -355,5 +389,24 @@ mod tests {
 
         let false_color = DebugPanel::bool_color(false, &theme);
         assert_eq!(false_color, theme.text_muted);
+    }
+
+    #[test]
+    fn test_debug_panel_shows_debug_fields() {
+        let state = SharedAppState::new();
+
+        // Set debug fields
+        {
+            let mut s = state.write();
+            s.frame_count = 42;
+            s.debug_mode = true;
+            s.max_frames = 100;
+        }
+
+        // Verify snapshot contains the debug fields
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.frame_count, 42);
+        assert!(snapshot.debug_mode);
+        assert_eq!(snapshot.max_frames, 100);
     }
 }

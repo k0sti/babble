@@ -133,7 +133,8 @@ impl ProtoApp {
             last_transcription: None,
             has_first_word: false,
             has_transcription: false,
-            debug_panel_open: true, // Start with debug panel open
+            // Open debug panel by default only when debug mode is enabled
+            debug_panel_open: debug_config.as_ref().is_some_and(|d| d.enabled),
             debug_config,
         }
     }
