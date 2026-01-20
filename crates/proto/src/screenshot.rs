@@ -28,9 +28,9 @@ pub fn request_screenshot(ctx: &Context, name: &str) {
 
 /// Processes input events to handle any pending screenshot results
 ///
-/// Returns true if a screenshot was successfully saved.
-pub fn process_screenshot_events(ctx: &Context) -> bool {
-    let mut screenshot_saved = false;
+/// Returns the number of screenshots successfully saved.
+pub fn process_screenshot_events(ctx: &Context) -> u32 {
+    let mut screenshots_saved = 0;
 
     ctx.input(|input| {
         for event in &input.events {
@@ -50,7 +50,7 @@ pub fn process_screenshot_events(ctx: &Context) -> bool {
                     if let Err(e) = save_screenshot(image, name) {
                         error!("[SCREENSHOT] Failed to save screenshot '{}': {}", name, e);
                     } else {
-                        screenshot_saved = true;
+                        screenshots_saved += 1;
                     }
                 } else {
                     error!("[SCREENSHOT] Screenshot event missing name in user_data");
@@ -59,7 +59,7 @@ pub fn process_screenshot_events(ctx: &Context) -> bool {
         }
     });
 
-    screenshot_saved
+    screenshots_saved
 }
 
 /// Saves a ColorImage to a PNG file in the output directory

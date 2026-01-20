@@ -74,6 +74,8 @@ pub struct ProtoApp {
     test_failed: bool,
     /// Sample count from the last recording (preserved after buffer is consumed by STT)
     last_recording_sample_count: usize,
+    /// Number of pending test snapshots waiting to be saved
+    pending_test_snapshots: u32,
 }
 
 impl ProtoApp {
@@ -149,6 +151,7 @@ impl ProtoApp {
             exit_screenshot_requested: false,
             test_failed: false,
             last_recording_sample_count: 0,
+            pending_test_snapshots: 0,
         }
     }
 
@@ -537,6 +540,7 @@ impl ProtoApp {
                 TestCommand::Snapshot { name } => {
                     info!("[TEST] Executing: Snapshot with name: {}", name);
                     screenshot::request_screenshot(ctx, &name);
+                    self.pending_test_snapshots += 1;
                 }
                 TestCommand::ReportSuccess => {
                     info!("[TEST] Test reported SUCCESS");
@@ -583,10 +587,20 @@ impl ProtoApp {
 
         // Check if test is complete
         if let Some(ref runner) = self.test_runner {
-            if runner.is_completed() {
+            if runner.is_completed() && self.pending_exit.is_some() {
+                // Wait for any pending snapshots to be saved before exiting
+                if self.pending_test_snapshots > 0 {
+                    debug!(
+                        "[TEST] Waiting for {} pending snapshot(s) before exit",
+                        self.pending_test_snapshots
+                    );
+                    ctx.request_repaint();
+                    return; // Don't exit yet, wait for screenshots to save
+                }
+
                 info!("{}", runner.summary());
 
-                // Handle exit
+                // Handle exit - all snapshots have been saved
                 if let Some(code) = self.pending_exit.take() {
                     // Test fails if runner.test_passed() is false OR test_failed flag is set
                     let test_passed = runner.test_passed() && !self.test_failed;
@@ -604,8 +618,20 @@ impl eframe::App for ProtoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Handle screenshot completion and exit
         // This must be checked at the start of each frame to process the screenshot event
+        let screenshots_saved = screenshot::process_screenshot_events(ctx);
+
+        // Decrement pending test snapshots counter
+        if screenshots_saved > 0 && self.pending_test_snapshots > 0 {
+            self.pending_test_snapshots = self.pending_test_snapshots.saturating_sub(screenshots_saved);
+            info!(
+                "[TEST] Processed {} screenshot(s), {} pending",
+                screenshots_saved, self.pending_test_snapshots
+            );
+        }
+
+        // Handle debug mode exit-frame screenshot
         if self.exit_screenshot_requested {
-            if screenshot::process_screenshot_events(ctx) {
+            if screenshots_saved > 0 {
                 info!("[DEBUG] Exit-frame screenshot saved, closing application");
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 return;
