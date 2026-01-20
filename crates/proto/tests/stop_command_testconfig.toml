@@ -1,0 +1,59 @@
+# Test configuration for voice command interruption
+#
+# This test:
+# 1. Sends a long prompt to start LLM generation
+# 2. Verifies LLM is generating and producing tokens
+# 3. Stops generation mid-stream
+# 4. Verifies the stop command worked and partial response is preserved
+
+[test]
+name = "Stop Command Interruption"
+description = "Tests that saying 'stop' interrupts LLM generation"
+
+[[actions]]
+time_ms = 0
+action = { type = "log", message = "Starting stop command test" }
+
+# Start LLM with a long prompt to ensure it's generating when we stop
+[[actions]]
+time_ms = 500
+action = { type = "send_text", text = "Write a detailed 500-word essay about the history of computing, covering mainframes, personal computers, and modern smartphones." }
+
+[[actions]]
+time_ms = 2000
+action = { type = "log", message = "Verifying LLM is generating" }
+assert = { type = "llm_is_generating" }
+
+[[actions]]
+time_ms = 3000
+action = { type = "log", message = "Verifying tokens are streaming" }
+assert = { type = "llm_response_not_empty" }
+
+# Stop generation
+[[actions]]
+time_ms = 4000
+action = { type = "stop_generation" }
+
+[[actions]]
+time_ms = 5000
+action = { type = "log", message = "Verifying LLM stopped" }
+assert = { type = "llm_is_idle" }
+
+[[actions]]
+time_ms = 5500
+action = { type = "log", message = "Verifying was interrupted" }
+assert = { type = "llm_was_interrupted" }
+
+# Response should still have partial content
+[[actions]]
+time_ms = 6000
+action = { type = "log", message = "Verifying partial response exists" }
+assert = { type = "llm_response_not_empty" }
+
+[[actions]]
+time_ms = 6500
+action = { type = "snapshot", name = "stop_command_result" }
+
+[[actions]]
+time_ms = 7000
+action = { type = "exit", code = 0 }
