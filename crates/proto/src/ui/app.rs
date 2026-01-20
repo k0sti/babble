@@ -4,7 +4,9 @@
 
 use crate::audio::{AudioRecorder, AudioRingBuffer};
 use crate::processor::{STTConfig, STTEvent, STTProcessor};
+use crate::state::SharedAppState;
 use crate::testconfig::{AssertionContext, AssertionResult, TestCommand, TestConfig, TestRunner};
+use crate::ui::components::debug_panel::DebugPanel;
 use crate::ui::components::record_button::StandaloneRecordButton;
 use crate::ui::components::waveform::StateWaveform;
 use crate::ui::state::AppState;
@@ -20,8 +22,10 @@ use tracing::{debug, error, info, warn};
 pub struct ProtoApp {
     /// Whether the app has been initialized
     initialized: bool,
-    /// Application state
+    /// Application state (local UI state)
     state: AppState,
+    /// Shared application state (for debug panel and future orchestrator integration)
+    shared_state: SharedAppState,
     /// UI theme
     theme: Theme,
     /// Test runner (if running automated tests)
@@ -48,6 +52,8 @@ pub struct ProtoApp {
     has_first_word: bool,
     /// Whether we've received a transcription
     has_transcription: bool,
+    /// Whether debug panel is open
+    debug_panel_open: bool,
 }
 
 impl ProtoApp {
@@ -90,6 +96,7 @@ impl ProtoApp {
         Self {
             initialized: false,
             state: AppState::new(),
+            shared_state: SharedAppState::new(),
             theme,
             test_runner,
             audio_recorder,
@@ -103,6 +110,7 @@ impl ProtoApp {
             last_transcription: None,
             has_first_word: false,
             has_transcription: false,
+            debug_panel_open: true, // Start with debug panel open
         }
     }
 
@@ -185,6 +193,30 @@ impl ProtoApp {
         }
 
         info!("Proto UI initialized");
+    }
+
+    /// Sync local state to shared state for debug panel
+    fn sync_shared_state(&self) {
+        let mut shared = self.shared_state.write();
+
+        // Sync recording state
+        shared.recording = match self.state.recording_state {
+            crate::ui::state::RecordingState::Idle => crate::state::RecordingState::Idle,
+            crate::ui::state::RecordingState::Recording => crate::state::RecordingState::Recording,
+            crate::ui::state::RecordingState::Processing => crate::state::RecordingState::Processing,
+        };
+
+        // Sync audio buffer samples
+        shared.audio_buffer_samples = self.audio_buffer.len();
+
+        // Sync transcription state
+        if self.has_first_word {
+            // We don't have the actual first word stored, so just mark it
+            shared.transcription.has_first_word = true;
+        }
+        if let Some(ref text) = self.last_transcription {
+            shared.transcription.last_text = Some(text.clone());
+        }
     }
 
     /// Process pending audio data from the channel
@@ -486,10 +518,24 @@ impl eframe::App for ProtoApp {
         // Process test commands (if in test mode)
         self.process_test_commands(ctx);
 
+        // Sync local state to shared state for debug panel
+        self.sync_shared_state();
+
         // Request repaint continuously if in test mode or processing (for timing accuracy)
         if self.test_runner.is_some() || self.state.is_processing() {
             ctx.request_repaint();
         }
+
+        // Debug panel in a side panel (right side)
+        egui::SidePanel::right("debug_panel")
+            .resizable(true)
+            .default_width(280.0)
+            .show_animated(ctx, self.debug_panel_open, |ui| {
+                ui.vertical(|ui| {
+                    ui.add_space(8.0);
+                    DebugPanel::new(&self.shared_state, &self.theme).show(ui);
+                });
+            });
 
         // Render main UI
         CentralPanel::default().show(ctx, |ui| {
@@ -594,6 +640,15 @@ impl eframe::App for ProtoApp {
                             .size(11.0)
                             .color(self.theme.warning.gamma_multiply(0.8)),
                     );
+                }
+
+                // Debug panel toggle at the bottom
+                ui.add_space(30.0);
+                ui.separator();
+                ui.add_space(8.0);
+                let debug_label = if self.debug_panel_open { "Hide Debug" } else { "Show Debug" };
+                if ui.small_button(debug_label).clicked() {
+                    self.debug_panel_open = !self.debug_panel_open;
                 }
             });
         });

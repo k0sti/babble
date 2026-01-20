@@ -8,6 +8,7 @@ pub mod audio;
 pub mod error;
 pub mod message;
 pub mod processor;
+pub mod state;
 pub mod testconfig;
 pub mod ui;
 
@@ -15,4 +16,10 @@ pub mod ui;
 pub use error::{ProtoError, Result};
 
 // Re-export audio types
-pub use audio::{AudioDeviceInfo, AudioRecorder, AudioRingBuffer, RecordingState};
+pub use audio::{AudioDeviceInfo, AudioRecorder, AudioRingBuffer};
+
+// Re-export state types
+pub use state::{
+    AppCommand, AppEvent, AppState, AppStateSnapshot, LLMState, RecordingState, ResponseState,
+    SharedAppState, TranscriptionState,
+};

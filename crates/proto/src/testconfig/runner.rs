@@ -2,15 +2,19 @@
 //!
 //! This module provides the TestRunner that schedules and executes
 //! test actions at their specified times.
+//!
+//! The test runner uses the unified `SharedAppState` for assertions,
+//! allowing it to query the same state that the UI and orchestrator use.
 
 use super::{ActionType, Assertion, TestConfig};
+use crate::state::{AppState, SharedAppState};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info};
 
-/// Commands that the test runner can send to the UI
+/// Commands that the test runner can send to the UI/orchestrator
 #[derive(Debug, Clone)]
 pub enum TestCommand {
-    /// Click the record button
+    /// Click the record button (toggle recording)
     ClickRecord,
     /// Stop recording
     StopRecord,
@@ -29,24 +33,24 @@ pub enum AssertionResult {
     Failed(String),
 }
 
-/// Context for assertion checking - passed from UI to runner
+/// Legacy context type - deprecated, use SharedAppState instead
+///
+/// This is kept for backwards compatibility with existing code.
+/// New code should use `SharedAppState` directly.
+#[deprecated(since = "0.2.0", note = "Use SharedAppState instead")]
 pub struct AssertionContext {
     pub is_recording: bool,
     pub is_processing: bool,
     pub is_idle: bool,
     pub audio_buffer_samples: usize,
-    /// STT processing phase (as string for flexibility)
     pub stt_phase: Option<String>,
-    /// Number of speech chunks detected by STT
     pub stt_speech_chunks: u64,
-    /// Whether a transcription result has been received
     pub stt_has_transcription: bool,
-    /// Whether a first word has been detected
     pub stt_has_first_word: bool,
-    /// The last transcription text (if any)
     pub stt_last_transcription: Option<String>,
 }
 
+#[allow(deprecated)]
 impl Default for AssertionContext {
     fn default() -> Self {
         Self {
@@ -59,6 +63,40 @@ impl Default for AssertionContext {
             stt_has_transcription: false,
             stt_has_first_word: false,
             stt_last_transcription: None,
+        }
+    }
+}
+
+#[allow(deprecated)]
+impl AssertionContext {
+    /// Create an AssertionContext from SharedAppState
+    pub fn from_shared_state(state: &SharedAppState) -> Self {
+        let s = state.read();
+        Self {
+            is_recording: s.recording.is_recording(),
+            is_processing: s.recording.is_processing(),
+            is_idle: s.recording.is_idle() && s.llm.is_idle(),
+            audio_buffer_samples: s.audio_buffer_samples,
+            stt_phase: None, // Not tracked in unified state
+            stt_speech_chunks: 0, // Not tracked in unified state
+            stt_has_transcription: s.transcription.last_text.is_some(),
+            stt_has_first_word: s.transcription.has_first_word,
+            stt_last_transcription: s.transcription.last_text.clone(),
+        }
+    }
+
+    /// Create an AssertionContext from AppState reference
+    pub fn from_app_state(s: &AppState) -> Self {
+        Self {
+            is_recording: s.recording.is_recording(),
+            is_processing: s.recording.is_processing(),
+            is_idle: s.recording.is_idle() && s.llm.is_idle(),
+            audio_buffer_samples: s.audio_buffer_samples,
+            stt_phase: None,
+            stt_speech_chunks: 0,
+            stt_has_transcription: s.transcription.last_text.is_some(),
+            stt_has_first_word: s.transcription.has_first_word,
+            stt_last_transcription: s.transcription.last_text.clone(),
         }
     }
 }
@@ -168,13 +206,36 @@ impl TestRunner {
                 info!("[TEST] Log: {}", message);
                 // Log actions don't produce a command that affects UI,
                 // but we return Exit with special code to indicate no-op
-                // Actually, let's handle this differently - we'll process it inline
                 TestCommand::Exit { code: -999 } // Sentinel value, won't be used
             }
         }
     }
 
-    /// Check an assertion against the current context
+    /// Check an assertion against the shared application state
+    ///
+    /// This is the preferred method for checking assertions.
+    pub fn check_assertion_with_state(
+        &mut self,
+        assertion: &Assertion,
+        state: &SharedAppState,
+    ) -> AssertionResult {
+        let s = state.read();
+        self.check_assertion_impl(assertion, &s)
+    }
+
+    /// Check an assertion against an AppState reference
+    pub fn check_assertion_with_app_state(
+        &mut self,
+        assertion: &Assertion,
+        state: &AppState,
+    ) -> AssertionResult {
+        self.check_assertion_impl(assertion, state)
+    }
+
+    /// Check an assertion against the legacy AssertionContext
+    ///
+    /// This method is deprecated. Use `check_assertion_with_state` instead.
+    #[allow(deprecated)]
     pub fn check_assertion(
         &mut self,
         assertion: &Assertion,
@@ -250,14 +311,18 @@ impl TestRunner {
                 if context.stt_has_transcription {
                     AssertionResult::Passed
                 } else {
-                    AssertionResult::Failed("Expected transcription result, none received".to_string())
+                    AssertionResult::Failed(
+                        "Expected transcription result, none received".to_string(),
+                    )
                 }
             }
             Assertion::SttHasFirstWord => {
                 if context.stt_has_first_word {
                     AssertionResult::Passed
                 } else {
-                    AssertionResult::Failed("Expected first word detection, none received".to_string())
+                    AssertionResult::Failed(
+                        "Expected first word detection, none received".to_string(),
+                    )
                 }
             }
             Assertion::SttTranscriptionContains { text } => {
@@ -279,7 +344,119 @@ impl TestRunner {
             }
         };
 
-        match &result {
+        self.log_assertion_result(assertion, &result);
+        result
+    }
+
+    /// Internal implementation for checking assertions against AppState
+    fn check_assertion_impl(&mut self, assertion: &Assertion, state: &AppState) -> AssertionResult {
+        let result = match assertion {
+            Assertion::IsRecording => {
+                if state.recording.is_recording() {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected state to be Recording, got {:?}",
+                        state.recording
+                    ))
+                }
+            }
+            Assertion::IsIdle => {
+                if state.is_idle() {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected state to be Idle, got recording={:?}, llm={:?}",
+                        state.recording, state.llm
+                    ))
+                }
+            }
+            Assertion::IsProcessing => {
+                if state.recording.is_processing() {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected state to be Processing, got {:?}",
+                        state.recording
+                    ))
+                }
+            }
+            Assertion::AudioBufferMinSamples { min_samples } => {
+                if state.audio_buffer_samples >= *min_samples {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected at least {} audio samples, got {}",
+                        min_samples, state.audio_buffer_samples
+                    ))
+                }
+            }
+            Assertion::AudioBufferNotEmpty => {
+                if state.audio_buffer_samples > 0 {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed("Expected audio buffer to not be empty".to_string())
+                }
+            }
+            Assertion::SttPhase { phase } => {
+                // STT phase is not tracked in unified state yet
+                // This assertion will need STT-specific integration
+                AssertionResult::Failed(format!(
+                    "STT phase assertion '{}' not yet supported with unified state",
+                    phase
+                ))
+            }
+            Assertion::SttSpeechChunksMin { min_chunks } => {
+                // Speech chunks not tracked in unified state yet
+                AssertionResult::Failed(format!(
+                    "STT speech chunks assertion (min={}) not yet supported with unified state",
+                    min_chunks
+                ))
+            }
+            Assertion::SttHasTranscription => {
+                if state.transcription.last_text.is_some() {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(
+                        "Expected transcription result, none received".to_string(),
+                    )
+                }
+            }
+            Assertion::SttHasFirstWord => {
+                if state.transcription.has_first_word {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(
+                        "Expected first word detection, none received".to_string(),
+                    )
+                }
+            }
+            Assertion::SttTranscriptionContains { text } => {
+                if let Some(ref transcription) = state.transcription.last_text {
+                    if transcription.to_lowercase().contains(&text.to_lowercase()) {
+                        AssertionResult::Passed
+                    } else {
+                        AssertionResult::Failed(format!(
+                            "Expected transcription to contain '{}', got '{}'",
+                            text, transcription
+                        ))
+                    }
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected transcription containing '{}', but no transcription received",
+                        text
+                    ))
+                }
+            }
+        };
+
+        self.log_assertion_result(assertion, &result);
+        result
+    }
+
+    /// Log the result of an assertion check
+    fn log_assertion_result(&mut self, assertion: &Assertion, result: &AssertionResult) {
+        match result {
             AssertionResult::Passed => {
                 info!("[TEST] PASS: Assertion {:?}", assertion);
             }
@@ -288,8 +465,6 @@ impl TestRunner {
                 self.test_passed = false;
             }
         }
-
-        result
     }
 
     /// Get a summary of the test result
