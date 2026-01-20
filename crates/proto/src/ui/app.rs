@@ -72,6 +72,8 @@ pub struct ProtoApp {
     exit_screenshot_requested: bool,
     /// Whether a test has reported failure
     test_failed: bool,
+    /// Sample count from the last recording (preserved after buffer is consumed by STT)
+    last_recording_sample_count: usize,
 }
 
 impl ProtoApp {
@@ -146,6 +148,7 @@ impl ProtoApp {
             orchestrator: None, // Set via set_orchestrator when orchestrator is available
             exit_screenshot_requested: false,
             test_failed: false,
+            last_recording_sample_count: 0,
         }
     }
 
@@ -251,8 +254,13 @@ impl ProtoApp {
             }
         };
 
-        // Sync audio buffer samples
-        shared.audio_buffer_samples = self.audio_buffer.len();
+        // Sync audio buffer samples (use preserved count if buffer was consumed by STT)
+        let current_samples = self.audio_buffer.len();
+        shared.audio_buffer_samples = if current_samples > 0 {
+            current_samples
+        } else {
+            self.last_recording_sample_count
+        };
 
         // Sync transcription state
         if self.has_first_word {
@@ -335,6 +343,7 @@ impl ProtoApp {
         self.has_first_word = false;
         self.has_transcription = false;
         self.last_transcription = None;
+        self.last_recording_sample_count = 0;
 
         if let Some(ref mut recorder) = self.audio_recorder {
             if let Some(tx) = self.audio_tx.clone() {
@@ -374,6 +383,8 @@ impl ProtoApp {
         self.state.stop_recording();
 
         let sample_count = self.audio_buffer.len();
+        // Preserve sample count for assertions after buffer is consumed
+        self.last_recording_sample_count = sample_count;
         info!(
             "[AUDIO] Recording stopped, buffer contains {} samples",
             sample_count
@@ -538,11 +549,18 @@ impl ProtoApp {
 
             // Check assertion if present
             if let Some(ref assertion) = assertion {
+                // Use preserved sample count if buffer was consumed by STT
+                let current_samples = self.audio_buffer.len();
+                let audio_samples = if current_samples > 0 {
+                    current_samples
+                } else {
+                    self.last_recording_sample_count
+                };
                 let context = AssertionContext {
                     is_recording: self.state.is_recording(),
                     is_processing: self.state.is_processing(),
                     is_idle: !self.state.is_recording() && !self.state.is_processing(),
-                    audio_buffer_samples: self.audio_buffer.len(),
+                    audio_buffer_samples: audio_samples,
                     stt_phase: None, // TODO: expose phase from STT processor
                     stt_speech_chunks: 0,
                     stt_has_transcription: self.has_transcription,
