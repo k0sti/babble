@@ -484,6 +484,29 @@ impl ProtoApp {
                         self.pending_exit = Some(code);
                     }
                 }
+                TestCommand::SendText { text } => {
+                    info!("[TEST] Executing: SendText with text: {}", text);
+                    // TODO: Send text directly to LLM when LLM integration is available
+                }
+                TestCommand::StopGeneration => {
+                    info!("[TEST] Executing: StopGeneration");
+                    // TODO: Stop LLM generation when LLM integration is available
+                }
+                TestCommand::Snapshot { name } => {
+                    info!("[TEST] Executing: Snapshot with name: {}", name);
+                    // TODO: Capture screenshot to output/<name>.png
+                }
+                TestCommand::ReportSuccess => {
+                    info!("[TEST] Executing: ReportSuccess");
+                    // Test marked as successful - this is informational
+                }
+                TestCommand::ReportFailure { reason } => {
+                    info!("[TEST] Executing: ReportFailure with reason: {}", reason);
+                    // Mark test as failed - set exit code to 1
+                    if self.pending_exit.is_none() || self.pending_exit == Some(0) {
+                        self.pending_exit = Some(1);
+                    }
+                }
             }
 
             // Check assertion if present

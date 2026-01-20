@@ -1,0 +1,47 @@
+# Test configuration for graceful error recovery
+#
+# This test:
+# 1. Performs normal recording operations
+# 2. Verifies the app remains functional after operations
+# 3. Confirms no errors and app is responsive
+
+[test]
+name = "Graceful Error Recovery"
+description = "Tests that app remains functional after errors"
+
+# Action 1: Log start of test
+[[actions]]
+time_ms = 0
+action = { type = "log", message = "Starting error recovery test" }
+
+# Action 2: Normal operation first - start recording
+[[actions]]
+time_ms = 500
+action = { type = "click_record" }
+
+# Action 3: Stop recording
+[[actions]]
+time_ms = 1000
+action = { type = "stop_record" }
+
+# Action 4: Verify still responsive - start recording again
+[[actions]]
+time_ms = 2000
+action = { type = "click_record" }
+assert = { type = "is_recording" }
+
+# Action 5: Stop recording again
+[[actions]]
+time_ms = 2500
+action = { type = "stop_record" }
+
+# Action 6: Log success and verify no errors
+[[actions]]
+time_ms = 3000
+action = { type = "log", message = "App remained functional" }
+assert = { type = "no_error" }
+
+# Action 7: Exit with success
+[[actions]]
+time_ms = 3500
+action = { type = "exit", code = 0 }

@@ -1,0 +1,44 @@
+# Test configuration for no microphone error handling
+#
+# This test:
+# 1. Attempts to record (will fail if no mic)
+# 2. Allows time for error to propagate
+# 3. Verifies the app remains stable
+# 4. Captures a snapshot for debugging
+
+[test]
+name = "No Microphone Error Handling"
+description = "Tests graceful handling when no microphone is available"
+
+# Action 1: Log start of test
+[[actions]]
+time_ms = 0
+action = { type = "log", message = "Starting no-microphone test" }
+
+# Action 2: Attempt to record (will fail if no mic)
+[[actions]]
+time_ms = 500
+action = { type = "click_record" }
+
+# Action 3: Allow time for error to propagate
+[[actions]]
+time_ms = 1500
+action = { type = "log", message = "Checking for error state" }
+
+# Action 4: Check state after attempt
+# Note: This test may need conditional logic based on actual mic availability
+# If mic exists, recording will succeed; if not, error will occur
+[[actions]]
+time_ms = 2000
+action = { type = "log", message = "Checking state after attempt" }
+assert = { type = "no_error" }
+
+# Action 5: Capture snapshot for debugging
+[[actions]]
+time_ms = 2500
+action = { type = "snapshot", name = "mic_test_result" }
+
+# Action 6: Exit with success
+[[actions]]
+time_ms = 3000
+action = { type = "exit", code = 0 }
