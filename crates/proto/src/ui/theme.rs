@@ -64,18 +64,18 @@ impl Theme {
             warning: Color32::from_rgb(234, 179, 8),    // Yellow
             error: Color32::from_rgb(239, 68, 68),      // Red
 
-            bg_primary: Color32::from_rgb(17, 24, 39),   // Dark blue-gray
+            bg_primary: Color32::from_rgb(17, 24, 39), // Dark blue-gray
             bg_secondary: Color32::from_rgb(31, 41, 55), // Lighter blue-gray
-            bg_tertiary: Color32::from_rgb(55, 65, 81),  // Even lighter
+            bg_tertiary: Color32::from_rgb(55, 65, 81), // Even lighter
 
-            text_primary: Color32::from_rgb(249, 250, 251),   // Almost white
+            text_primary: Color32::from_rgb(249, 250, 251), // Almost white
             text_secondary: Color32::from_rgb(209, 213, 219), // Light gray
-            text_muted: Color32::from_rgb(156, 163, 175),     // Medium gray
+            text_muted: Color32::from_rgb(156, 163, 175),   // Medium gray
 
             recording: Color32::from_rgb(239, 68, 68), // Red
 
-            waveform_active: Color32::from_rgb(99, 102, 241),  // Indigo (matches primary)
-            waveform_inactive: Color32::from_rgb(75, 85, 99),  // Gray
+            waveform_active: Color32::from_rgb(99, 102, 241), // Indigo (matches primary)
+            waveform_inactive: Color32::from_rgb(75, 85, 99), // Gray
 
             button_rounding: Rounding::same(8.0),
             card_rounding: Rounding::same(12.0),
@@ -95,17 +95,17 @@ impl Theme {
             warning: Color32::from_rgb(202, 138, 4),    // Yellow
             error: Color32::from_rgb(220, 38, 38),      // Red
 
-            bg_primary: Color32::from_rgb(255, 255, 255),  // White
+            bg_primary: Color32::from_rgb(255, 255, 255), // White
             bg_secondary: Color32::from_rgb(243, 244, 246), // Light gray
             bg_tertiary: Color32::from_rgb(229, 231, 235), // Lighter gray
 
-            text_primary: Color32::from_rgb(17, 24, 39),  // Dark
+            text_primary: Color32::from_rgb(17, 24, 39), // Dark
             text_secondary: Color32::from_rgb(55, 65, 81), // Gray
             text_muted: Color32::from_rgb(107, 114, 128), // Medium gray
 
             recording: Color32::from_rgb(220, 38, 38), // Red
 
-            waveform_active: Color32::from_rgb(79, 70, 229),   // Indigo (matches primary)
+            waveform_active: Color32::from_rgb(79, 70, 229), // Indigo (matches primary)
             waveform_inactive: Color32::from_rgb(156, 163, 175), // Gray
 
             button_rounding: Rounding::same(8.0),

@@ -7,7 +7,7 @@ pub mod components;
 mod state;
 mod theme;
 
-pub use app::ProtoApp;
+pub use app::{DebugConfig, ProtoApp};
 pub use components::{RecordButton, StateWaveform, Waveform};
 pub use state::{AppState, RecordingState};
 pub use theme::Theme;

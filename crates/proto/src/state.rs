@@ -186,6 +186,12 @@ pub struct AppState {
     pub error: Option<String>,
     /// Audio buffer sample count (for assertions/UI)
     pub audio_buffer_samples: usize,
+    /// Frame counter for debugging
+    pub frame_count: u64,
+    /// Debug mode enabled
+    pub debug_mode: bool,
+    /// Max frames before exit (0 = unlimited)
+    pub max_frames: u64,
 }
 
 impl AppState {
@@ -203,6 +209,9 @@ impl AppState {
             response: self.response.clone(),
             error: self.error.clone(),
             audio_buffer_samples: self.audio_buffer_samples,
+            frame_count: self.frame_count,
+            debug_mode: self.debug_mode,
+            max_frames: self.max_frames,
         }
     }
 
@@ -275,6 +284,9 @@ pub struct AppStateSnapshot {
     pub response: ResponseState,
     pub error: Option<String>,
     pub audio_buffer_samples: usize,
+    pub frame_count: u64,
+    pub debug_mode: bool,
+    pub max_frames: u64,
 }
 
 /// Thread-safe shared application state
@@ -359,6 +371,21 @@ impl SharedAppState {
     /// Get audio buffer sample count
     pub fn audio_buffer_samples(&self) -> usize {
         self.inner.read().audio_buffer_samples
+    }
+
+    /// Get current frame count
+    pub fn frame_count(&self) -> u64 {
+        self.inner.read().frame_count
+    }
+
+    /// Check if debug mode is enabled
+    pub fn is_debug_mode(&self) -> bool {
+        self.inner.read().debug_mode
+    }
+
+    /// Get max frames limit (0 = unlimited)
+    pub fn max_frames(&self) -> u64 {
+        self.inner.read().max_frames
     }
 }
 
@@ -449,7 +476,10 @@ mod tests {
 
         assert!(state.llm.is_idle());
         assert!(state.response.was_interrupted);
-        assert_eq!(state.response.last_complete, Some("Hello world".to_string()));
+        assert_eq!(
+            state.response.last_complete,
+            Some("Hello world".to_string())
+        );
     }
 
     #[test]
@@ -462,7 +492,9 @@ mod tests {
         assert!(state.transcription.has_first_word);
         assert_eq!(state.transcription.first_word, Some("stop".to_string()));
 
-        state.transcription.set_transcription("stop the music".to_string());
+        state
+            .transcription
+            .set_transcription("stop the music".to_string());
         assert_eq!(
             state.transcription.last_text,
             Some("stop the music".to_string())
@@ -543,5 +575,75 @@ mod tests {
         let _token = AppEvent::LLMToken("hello".to_string());
         let _error = AppEvent::Error("test error".to_string());
         let _shutdown = AppEvent::Shutdown;
+    }
+
+    #[test]
+    fn test_debug_fields_default() {
+        let state = AppState::new();
+        assert_eq!(state.frame_count, 0);
+        assert!(!state.debug_mode);
+        assert_eq!(state.max_frames, 0);
+    }
+
+    #[test]
+    fn test_frame_counter() {
+        let shared = SharedAppState::new();
+
+        assert_eq!(shared.frame_count(), 0);
+
+        {
+            let mut state = shared.write();
+            state.frame_count += 1;
+        }
+        assert_eq!(shared.frame_count(), 1);
+
+        {
+            let mut state = shared.write();
+            state.frame_count += 99;
+        }
+        assert_eq!(shared.frame_count(), 100);
+    }
+
+    #[test]
+    fn test_debug_mode() {
+        let shared = SharedAppState::new();
+
+        assert!(!shared.is_debug_mode());
+
+        {
+            let mut state = shared.write();
+            state.debug_mode = true;
+        }
+        assert!(shared.is_debug_mode());
+    }
+
+    #[test]
+    fn test_max_frames() {
+        let shared = SharedAppState::new();
+
+        assert_eq!(shared.max_frames(), 0);
+
+        {
+            let mut state = shared.write();
+            state.max_frames = 100;
+        }
+        assert_eq!(shared.max_frames(), 100);
+    }
+
+    #[test]
+    fn test_snapshot_includes_debug_fields() {
+        let shared = SharedAppState::new();
+
+        {
+            let mut state = shared.write();
+            state.debug_mode = true;
+            state.max_frames = 50;
+            state.frame_count = 25;
+        }
+
+        let snapshot = shared.snapshot();
+        assert!(snapshot.debug_mode);
+        assert_eq!(snapshot.max_frames, 50);
+        assert_eq!(snapshot.frame_count, 25);
     }
 }

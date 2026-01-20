@@ -38,11 +38,12 @@ impl<'a> DebugPanel<'a> {
                             .color(self.theme.text_primary),
                     );
                     ui.add_space(8.0);
-                    let busy_indicator = if snapshot.recording.is_active() || snapshot.llm.is_generating() {
-                        RichText::new("BUSY").color(self.theme.warning).strong()
-                    } else {
-                        RichText::new("IDLE").color(self.theme.success).strong()
-                    };
+                    let busy_indicator =
+                        if snapshot.recording.is_active() || snapshot.llm.is_generating() {
+                            RichText::new("BUSY").color(self.theme.warning).strong()
+                        } else {
+                            RichText::new("IDLE").color(self.theme.success).strong()
+                        };
                     ui.label(busy_indicator);
                 });
 
@@ -55,21 +56,37 @@ impl<'a> DebugPanel<'a> {
                     .striped(true)
                     .show(ui, |ui| {
                         // Recording State
-                        self.state_row(ui, "Recording", &format!("{:?}", snapshot.recording),
-                            Self::recording_state_color(snapshot.recording, self.theme));
+                        self.state_row(
+                            ui,
+                            "Recording",
+                            &format!("{:?}", snapshot.recording),
+                            Self::recording_state_color(snapshot.recording, self.theme),
+                        );
 
                         // LLM State
-                        self.state_row(ui, "LLM", &format!("{:?}", snapshot.llm),
-                            Self::llm_state_color(snapshot.llm, self.theme));
+                        self.state_row(
+                            ui,
+                            "LLM",
+                            &format!("{:?}", snapshot.llm),
+                            Self::llm_state_color(snapshot.llm, self.theme),
+                        );
 
                         // Audio Buffer
-                        self.state_row(ui, "Audio Samples", &format!("{}", snapshot.audio_buffer_samples),
-                            self.theme.text_secondary);
+                        self.state_row(
+                            ui,
+                            "Audio Samples",
+                            &format!("{}", snapshot.audio_buffer_samples),
+                            self.theme.text_secondary,
+                        );
 
                         // Audio Duration (assuming 16kHz)
                         let duration_secs = snapshot.audio_buffer_samples as f32 / 16000.0;
-                        self.state_row(ui, "Audio Duration", &format!("{:.2}s", duration_secs),
-                            self.theme.text_secondary);
+                        self.state_row(
+                            ui,
+                            "Audio Duration",
+                            &format!("{:.2}s", duration_secs),
+                            self.theme.text_secondary,
+                        );
 
                         ui.end_row();
                         ui.separator();
@@ -77,21 +94,39 @@ impl<'a> DebugPanel<'a> {
                         ui.end_row();
 
                         // Transcription State header
-                        ui.label(RichText::new("Transcription").strong().color(self.theme.text_primary));
+                        ui.label(
+                            RichText::new("Transcription")
+                                .strong()
+                                .color(self.theme.text_primary),
+                        );
                         ui.end_row();
 
                         // Has First Word
-                        self.state_row(ui, "Has First Word",
+                        self.state_row(
+                            ui,
+                            "Has First Word",
                             &format!("{}", snapshot.transcription.has_first_word),
-                            Self::bool_color(snapshot.transcription.has_first_word, self.theme));
+                            Self::bool_color(snapshot.transcription.has_first_word, self.theme),
+                        );
 
                         // First Word
-                        self.state_row(ui, "First Word",
-                            &snapshot.transcription.first_word.as_deref().unwrap_or("(none)"),
-                            self.theme.text_secondary);
+                        self.state_row(
+                            ui,
+                            "First Word",
+                            &snapshot
+                                .transcription
+                                .first_word
+                                .as_deref()
+                                .unwrap_or("(none)"),
+                            self.theme.text_secondary,
+                        );
 
                         // Last Transcription
-                        let transcription_text = snapshot.transcription.last_text.as_deref().unwrap_or("(none)");
+                        let transcription_text = snapshot
+                            .transcription
+                            .last_text
+                            .as_deref()
+                            .unwrap_or("(none)");
                         let truncated = if transcription_text.len() > 50 {
                             format!("{}...", &transcription_text[..50])
                         } else {
@@ -105,18 +140,28 @@ impl<'a> DebugPanel<'a> {
                         ui.end_row();
 
                         // Response State header
-                        ui.label(RichText::new("LLM Response").strong().color(self.theme.text_primary));
+                        ui.label(
+                            RichText::new("LLM Response")
+                                .strong()
+                                .color(self.theme.text_primary),
+                        );
                         ui.end_row();
 
                         // Current Response Length
-                        self.state_row(ui, "Current Length",
+                        self.state_row(
+                            ui,
+                            "Current Length",
                             &format!("{} chars", snapshot.response.current_text.len()),
-                            self.theme.text_secondary);
+                            self.theme.text_secondary,
+                        );
 
                         // Was Interrupted
-                        self.state_row(ui, "Was Interrupted",
+                        self.state_row(
+                            ui,
+                            "Was Interrupted",
                             &format!("{}", snapshot.response.was_interrupted),
-                            Self::bool_color(snapshot.response.was_interrupted, self.theme));
+                            Self::bool_color(snapshot.response.was_interrupted, self.theme),
+                        );
 
                         // Current Response Preview
                         let response_preview = if snapshot.response.current_text.is_empty() {
@@ -126,16 +171,30 @@ impl<'a> DebugPanel<'a> {
                         } else {
                             snapshot.response.current_text.clone()
                         };
-                        self.state_row(ui, "Current Text", &response_preview, self.theme.text_secondary);
+                        self.state_row(
+                            ui,
+                            "Current Text",
+                            &response_preview,
+                            self.theme.text_secondary,
+                        );
 
                         // Last Complete Response
-                        let last_complete = snapshot.response.last_complete.as_deref().unwrap_or("(none)");
+                        let last_complete = snapshot
+                            .response
+                            .last_complete
+                            .as_deref()
+                            .unwrap_or("(none)");
                         let last_truncated = if last_complete.len() > 50 {
                             format!("{}...", &last_complete[..50])
                         } else {
                             last_complete.to_string()
                         };
-                        self.state_row(ui, "Last Complete", &last_truncated, self.theme.text_secondary);
+                        self.state_row(
+                            ui,
+                            "Last Complete",
+                            &last_truncated,
+                            self.theme.text_secondary,
+                        );
 
                         ui.end_row();
                         ui.separator();
@@ -143,7 +202,11 @@ impl<'a> DebugPanel<'a> {
                         ui.end_row();
 
                         // Error State
-                        ui.label(RichText::new("Error").strong().color(self.theme.text_primary));
+                        ui.label(
+                            RichText::new("Error")
+                                .strong()
+                                .color(self.theme.text_primary),
+                        );
                         ui.end_row();
 
                         let error_text = snapshot.error.as_deref().unwrap_or("(none)");
@@ -161,7 +224,12 @@ impl<'a> DebugPanel<'a> {
     /// Helper to render a state row
     fn state_row(&self, ui: &mut Ui, label: &str, value: &str, value_color: Color32) {
         ui.label(RichText::new(label).color(self.theme.text_muted).size(12.0));
-        ui.label(RichText::new(value).color(value_color).monospace().size(12.0));
+        ui.label(
+            RichText::new(value)
+                .color(value_color)
+                .monospace()
+                .size(12.0),
+        );
         ui.end_row();
     }
 
@@ -262,7 +330,8 @@ mod tests {
         let recording_color = DebugPanel::recording_state_color(RecordingState::Recording, &theme);
         assert_eq!(recording_color, theme.recording);
 
-        let processing_color = DebugPanel::recording_state_color(RecordingState::Processing, &theme);
+        let processing_color =
+            DebugPanel::recording_state_color(RecordingState::Processing, &theme);
         assert_eq!(processing_color, theme.warning);
     }
 

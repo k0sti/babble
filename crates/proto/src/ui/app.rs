@@ -2,6 +2,15 @@
 //!
 //! This module contains the main ProtoApp that implements eframe::App.
 
+/// Debug configuration passed from CLI arguments
+#[derive(Clone, Debug)]
+pub struct DebugConfig {
+    /// Debug mode enabled
+    pub enabled: bool,
+    /// Max frames before exit (0 = unlimited)
+    pub max_frames: u64,
+}
+
 use crate::audio::{AudioRecorder, AudioRingBuffer};
 use crate::processor::{STTConfig, STTEvent, STTProcessor};
 use crate::state::SharedAppState;
@@ -54,11 +63,17 @@ pub struct ProtoApp {
     has_transcription: bool,
     /// Whether debug panel is open
     debug_panel_open: bool,
+    /// Debug configuration from CLI
+    debug_config: Option<DebugConfig>,
 }
 
 impl ProtoApp {
     /// Create a new Proto application
-    pub fn new(cc: &eframe::CreationContext<'_>, test_config: Option<TestConfig>) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        test_config: Option<TestConfig>,
+        debug_config: Option<DebugConfig>,
+    ) -> Self {
         let theme = Theme::dark();
 
         // Apply theme to egui context
@@ -93,10 +108,18 @@ impl ProtoApp {
         // Initialize STT processor
         let (stt_processor, stt_worker_handle) = Self::init_stt();
 
+        // Create shared state with debug config values
+        let shared_state = SharedAppState::new();
+        if let Some(ref debug) = debug_config {
+            let mut state = shared_state.write();
+            state.debug_mode = debug.enabled;
+            state.max_frames = debug.max_frames;
+        }
+
         Self {
             initialized: false,
             state: AppState::new(),
-            shared_state: SharedAppState::new(),
+            shared_state,
             theme,
             test_runner,
             audio_recorder,
@@ -111,6 +134,7 @@ impl ProtoApp {
             has_first_word: false,
             has_transcription: false,
             debug_panel_open: true, // Start with debug panel open
+            debug_config,
         }
     }
 
@@ -203,7 +227,9 @@ impl ProtoApp {
         shared.recording = match self.state.recording_state {
             crate::ui::state::RecordingState::Idle => crate::state::RecordingState::Idle,
             crate::ui::state::RecordingState::Recording => crate::state::RecordingState::Recording,
-            crate::ui::state::RecordingState::Processing => crate::state::RecordingState::Processing,
+            crate::ui::state::RecordingState::Processing => {
+                crate::state::RecordingState::Processing
+            }
         };
 
         // Sync audio buffer samples
@@ -506,6 +532,18 @@ impl ProtoApp {
 
 impl eframe::App for ProtoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Increment frame counter and check for frame-limited exit
+        {
+            let mut state = self.shared_state.write();
+            state.frame_count += 1;
+
+            // Check for frame-limited exit in debug mode
+            if state.max_frames > 0 && state.frame_count >= state.max_frames {
+                info!("[DEBUG] Reached max frames ({}), exiting", state.max_frames);
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+
         // Initialize on first frame
         self.initialize();
 
@@ -521,8 +559,11 @@ impl eframe::App for ProtoApp {
         // Sync local state to shared state for debug panel
         self.sync_shared_state();
 
-        // Request repaint continuously if in test mode or processing (for timing accuracy)
-        if self.test_runner.is_some() || self.state.is_processing() {
+        // Request repaint continuously if in test mode, debug mode with max_frames, or processing
+        if self.test_runner.is_some()
+            || self.state.is_processing()
+            || self.debug_config.as_ref().is_some_and(|d| d.max_frames > 0)
+        {
             ctx.request_repaint();
         }
 
@@ -646,7 +687,11 @@ impl eframe::App for ProtoApp {
                 ui.add_space(30.0);
                 ui.separator();
                 ui.add_space(8.0);
-                let debug_label = if self.debug_panel_open { "Hide Debug" } else { "Show Debug" };
+                let debug_label = if self.debug_panel_open {
+                    "Hide Debug"
+                } else {
+                    "Show Debug"
+                };
                 if ui.small_button(debug_label).clicked() {
                     self.debug_panel_open = !self.debug_panel_open;
                 }

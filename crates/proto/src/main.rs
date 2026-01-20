@@ -4,7 +4,7 @@
 
 use eframe::egui;
 use proto::testconfig::TestConfig;
-use proto::ui::ProtoApp;
+use proto::ui::{DebugConfig, ProtoApp};
 use std::env;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -12,12 +12,18 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 struct Args {
     /// Path to test configuration file
     test_config: Option<String>,
+    /// Debug mode enabled
+    debug_mode: bool,
+    /// Max frames before exit (0 = unlimited)
+    max_frames: u64,
 }
 
 impl Args {
     fn parse() -> Self {
         let args: Vec<String> = env::args().collect();
         let mut test_config = None;
+        let mut debug_mode = false;
+        let mut max_frames: u64 = 0;
 
         let mut i = 1;
         while i < args.len() {
@@ -31,6 +37,18 @@ impl Args {
                         std::process::exit(1);
                     }
                 }
+                "--debug" => {
+                    debug_mode = true;
+                    // Check if next arg is a number (optional max_frames)
+                    if i + 1 < args.len() {
+                        if let Ok(n) = args[i + 1].parse::<u64>() {
+                            max_frames = n;
+                            i += 2;
+                            continue;
+                        }
+                    }
+                    i += 1;
+                }
                 "-h" | "--help" => {
                     println!("Proto - Voice-controlled LLM assistant");
                     println!();
@@ -39,6 +57,7 @@ impl Args {
                     println!();
                     println!("OPTIONS:");
                     println!("    --test <FILE>    Run predefined tests from a TOML config file");
+                    println!("    --debug [FRAMES] Enable debug mode, optionally exit after FRAMES frames");
                     println!("    -h, --help       Print this help message");
                     std::process::exit(0);
                 }
@@ -49,7 +68,11 @@ impl Args {
             }
         }
 
-        Self { test_config }
+        Self {
+            test_config,
+            debug_mode,
+            max_frames,
+        }
     }
 }
 
@@ -90,6 +113,24 @@ fn main() -> eframe::Result<()> {
         None
     };
 
+    // Create debug config from arguments
+    let debug_config = if args.debug_mode {
+        tracing::info!(
+            "Debug mode enabled{}",
+            if args.max_frames > 0 {
+                format!(", will exit after {} frames", args.max_frames)
+            } else {
+                String::new()
+            }
+        );
+        Some(DebugConfig {
+            enabled: true,
+            max_frames: args.max_frames,
+        })
+    } else {
+        None
+    };
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0])
@@ -101,6 +142,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Proto",
         options,
-        Box::new(move |cc| Ok(Box::new(ProtoApp::new(cc, test_config)))),
+        Box::new(move |cc| Ok(Box::new(ProtoApp::new(cc, test_config, debug_config)))),
     )
 }
