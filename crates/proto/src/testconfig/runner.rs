@@ -359,6 +359,19 @@ impl TestRunner {
                     ))
                 }
             }
+            // LLM state assertions - not supported in legacy context
+            Assertion::LlmIsGenerating
+            | Assertion::LlmIsIdle
+            | Assertion::LlmResponseNotEmpty
+            | Assertion::LlmResponseContains { .. }
+            | Assertion::LlmWasInterrupted
+            | Assertion::NoError
+            | Assertion::HasError
+            | Assertion::ErrorContains { .. } => {
+                AssertionResult::Failed(
+                    "LLM and error assertions not supported with legacy AssertionContext, use check_assertion_with_state instead".to_string()
+                )
+            }
         };
 
         self.log_assertion_result(assertion, &result);
@@ -465,6 +478,82 @@ impl TestRunner {
                     ))
                 }
             }
+            // LLM state assertions
+            Assertion::LlmIsGenerating => {
+                if state.llm.is_generating() {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(format!("Expected LLM generating, got {:?}", state.llm))
+                }
+            }
+            Assertion::LlmIsIdle => {
+                if state.llm.is_idle() {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(format!("Expected LLM idle, got {:?}", state.llm))
+                }
+            }
+            Assertion::LlmResponseNotEmpty => {
+                if !state.response.current_text.is_empty() {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed("Expected non-empty LLM response".to_string())
+                }
+            }
+            Assertion::LlmResponseContains { text } => {
+                if state
+                    .response
+                    .current_text
+                    .to_lowercase()
+                    .contains(&text.to_lowercase())
+                {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected response to contain '{}', got '{}'",
+                        text, state.response.current_text
+                    ))
+                }
+            }
+            Assertion::LlmWasInterrupted => {
+                if state.response.was_interrupted {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed("Expected LLM to have been interrupted".to_string())
+                }
+            }
+            // Error state assertions
+            Assertion::NoError => {
+                if state.error.is_none() {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed(format!("Expected no error, got: {:?}", state.error))
+                }
+            }
+            Assertion::HasError => {
+                if state.error.is_some() {
+                    AssertionResult::Passed
+                } else {
+                    AssertionResult::Failed("Expected an error state".to_string())
+                }
+            }
+            Assertion::ErrorContains { text } => {
+                if let Some(ref err) = state.error {
+                    if err.to_lowercase().contains(&text.to_lowercase()) {
+                        AssertionResult::Passed
+                    } else {
+                        AssertionResult::Failed(format!(
+                            "Expected error containing '{}', got '{}'",
+                            text, err
+                        ))
+                    }
+                } else {
+                    AssertionResult::Failed(format!(
+                        "Expected error containing '{}', but no error",
+                        text
+                    ))
+                }
+            }
         };
 
         self.log_assertion_result(assertion, &result);
@@ -494,5 +583,249 @@ impl TestRunner {
             self.current_action_index,
             self.elapsed()
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::{AppState, LLMState};
+
+    /// Helper to create a minimal test config for runner instantiation
+    fn minimal_test_config() -> TestConfig {
+        TestConfig {
+            test: super::super::TestMetadata {
+                name: "Test".to_string(),
+                description: String::new(),
+            },
+            actions: vec![super::super::TestAction {
+                time_ms: 0,
+                action: ActionType::Exit { code: 0 },
+                assert: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn test_llm_is_generating_pass() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.llm = LLMState::Generating;
+
+        let result = runner.check_assertion_with_app_state(&Assertion::LlmIsGenerating, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_llm_is_generating_fail() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let state = AppState::new(); // Default is Idle
+
+        let result = runner.check_assertion_with_app_state(&Assertion::LlmIsGenerating, &state);
+        assert!(matches!(result, AssertionResult::Failed(_)));
+    }
+
+    #[test]
+    fn test_llm_is_idle_pass() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let state = AppState::new(); // Default is Idle
+
+        let result = runner.check_assertion_with_app_state(&Assertion::LlmIsIdle, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_llm_is_idle_fail() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.llm = LLMState::Generating;
+
+        let result = runner.check_assertion_with_app_state(&Assertion::LlmIsIdle, &state);
+        assert!(matches!(result, AssertionResult::Failed(_)));
+    }
+
+    #[test]
+    fn test_llm_response_not_empty_pass() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.response.current_text = "Hello world".to_string();
+
+        let result = runner.check_assertion_with_app_state(&Assertion::LlmResponseNotEmpty, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_llm_response_not_empty_fail() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let state = AppState::new(); // Empty response
+
+        let result = runner.check_assertion_with_app_state(&Assertion::LlmResponseNotEmpty, &state);
+        assert!(matches!(result, AssertionResult::Failed(_)));
+    }
+
+    #[test]
+    fn test_llm_response_contains_pass() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.response.current_text = "Hello World!".to_string();
+
+        let assertion = Assertion::LlmResponseContains {
+            text: "world".to_string(),
+        };
+        let result = runner.check_assertion_with_app_state(&assertion, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_llm_response_contains_case_insensitive() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.response.current_text = "HELLO WORLD".to_string();
+
+        let assertion = Assertion::LlmResponseContains {
+            text: "hello".to_string(),
+        };
+        let result = runner.check_assertion_with_app_state(&assertion, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_llm_response_contains_fail() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.response.current_text = "Hello World".to_string();
+
+        let assertion = Assertion::LlmResponseContains {
+            text: "goodbye".to_string(),
+        };
+        let result = runner.check_assertion_with_app_state(&assertion, &state);
+        assert!(matches!(result, AssertionResult::Failed(_)));
+    }
+
+    #[test]
+    fn test_llm_was_interrupted_pass() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.response.was_interrupted = true;
+
+        let result = runner.check_assertion_with_app_state(&Assertion::LlmWasInterrupted, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_llm_was_interrupted_fail() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let state = AppState::new(); // was_interrupted defaults to false
+
+        let result = runner.check_assertion_with_app_state(&Assertion::LlmWasInterrupted, &state);
+        assert!(matches!(result, AssertionResult::Failed(_)));
+    }
+
+    #[test]
+    fn test_no_error_pass() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let state = AppState::new(); // error defaults to None
+
+        let result = runner.check_assertion_with_app_state(&Assertion::NoError, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_no_error_fail() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.error = Some("Connection failed".to_string());
+
+        let result = runner.check_assertion_with_app_state(&Assertion::NoError, &state);
+        assert!(matches!(result, AssertionResult::Failed(_)));
+    }
+
+    #[test]
+    fn test_has_error_pass() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.error = Some("Connection failed".to_string());
+
+        let result = runner.check_assertion_with_app_state(&Assertion::HasError, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_has_error_fail() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let state = AppState::new(); // error defaults to None
+
+        let result = runner.check_assertion_with_app_state(&Assertion::HasError, &state);
+        assert!(matches!(result, AssertionResult::Failed(_)));
+    }
+
+    #[test]
+    fn test_error_contains_pass() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.error = Some("Connection failed: timeout".to_string());
+
+        let assertion = Assertion::ErrorContains {
+            text: "timeout".to_string(),
+        };
+        let result = runner.check_assertion_with_app_state(&assertion, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_error_contains_case_insensitive() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.error = Some("CONNECTION FAILED".to_string());
+
+        let assertion = Assertion::ErrorContains {
+            text: "connection".to_string(),
+        };
+        let result = runner.check_assertion_with_app_state(&assertion, &state);
+        assert!(matches!(result, AssertionResult::Passed));
+    }
+
+    #[test]
+    fn test_error_contains_fail_no_match() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let mut state = AppState::new();
+        state.error = Some("Connection failed".to_string());
+
+        let assertion = Assertion::ErrorContains {
+            text: "timeout".to_string(),
+        };
+        let result = runner.check_assertion_with_app_state(&assertion, &state);
+        assert!(matches!(result, AssertionResult::Failed(_)));
+    }
+
+    #[test]
+    fn test_error_contains_fail_no_error() {
+        let config = minimal_test_config();
+        let mut runner = TestRunner::new(config);
+        let state = AppState::new(); // No error
+
+        let assertion = Assertion::ErrorContains {
+            text: "timeout".to_string(),
+        };
+        let result = runner.check_assertion_with_app_state(&assertion, &state);
+        assert!(matches!(result, AssertionResult::Failed(_)));
     }
 }

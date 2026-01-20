@@ -121,6 +121,32 @@ pub enum Assertion {
         /// Substring to search for (case-insensitive)
         text: String,
     },
+
+    // LLM state assertions
+    /// Assert LLM is actively generating
+    LlmIsGenerating,
+    /// Assert LLM is idle (not generating)
+    LlmIsIdle,
+    /// Assert LLM response has content
+    LlmResponseNotEmpty,
+    /// Assert LLM response contains substring (case-insensitive)
+    LlmResponseContains {
+        /// Substring to search for (case-insensitive)
+        text: String,
+    },
+    /// Assert LLM generation was interrupted
+    LlmWasInterrupted,
+
+    // Error state assertions
+    /// Assert no error state
+    NoError,
+    /// Assert an error has occurred
+    HasError,
+    /// Assert error message contains substring
+    ErrorContains {
+        /// Substring to search for (case-insensitive)
+        text: String,
+    },
 }
 
 impl TestConfig {
@@ -400,6 +426,103 @@ mod tests {
         assert!(matches!(
             &config.actions[0].action,
             ActionType::ReportFailure { reason } if reason == "Test condition not met"
+        ));
+    }
+
+    #[test]
+    fn test_parse_llm_assertions() {
+        let toml_str = r#"
+            [test]
+            name = "LLM assertions test"
+
+            [[actions]]
+            time_ms = 100
+            action = { type = "log", message = "Check generating" }
+            assert = { type = "llm_is_generating" }
+
+            [[actions]]
+            time_ms = 200
+            action = { type = "log", message = "Check idle" }
+            assert = { type = "llm_is_idle" }
+
+            [[actions]]
+            time_ms = 300
+            action = { type = "log", message = "Check response not empty" }
+            assert = { type = "llm_response_not_empty" }
+
+            [[actions]]
+            time_ms = 400
+            action = { type = "log", message = "Check response contains" }
+            assert = { type = "llm_response_contains", text = "hello" }
+
+            [[actions]]
+            time_ms = 500
+            action = { type = "log", message = "Check interrupted" }
+            assert = { type = "llm_was_interrupted" }
+
+            [[actions]]
+            time_ms = 600
+            action = { type = "exit", code = 0 }
+        "#;
+
+        let config: TestConfig = toml::from_str(toml_str).unwrap();
+        assert!(matches!(
+            config.actions[0].assert,
+            Some(Assertion::LlmIsGenerating)
+        ));
+        assert!(matches!(
+            config.actions[1].assert,
+            Some(Assertion::LlmIsIdle)
+        ));
+        assert!(matches!(
+            config.actions[2].assert,
+            Some(Assertion::LlmResponseNotEmpty)
+        ));
+        assert!(matches!(
+            config.actions[3].assert,
+            Some(Assertion::LlmResponseContains { ref text }) if text == "hello"
+        ));
+        assert!(matches!(
+            config.actions[4].assert,
+            Some(Assertion::LlmWasInterrupted)
+        ));
+    }
+
+    #[test]
+    fn test_parse_error_assertions() {
+        let toml_str = r#"
+            [test]
+            name = "Error assertions test"
+
+            [[actions]]
+            time_ms = 100
+            action = { type = "log", message = "Check no error" }
+            assert = { type = "no_error" }
+
+            [[actions]]
+            time_ms = 200
+            action = { type = "log", message = "Check has error" }
+            assert = { type = "has_error" }
+
+            [[actions]]
+            time_ms = 300
+            action = { type = "log", message = "Check error contains" }
+            assert = { type = "error_contains", text = "connection failed" }
+
+            [[actions]]
+            time_ms = 400
+            action = { type = "exit", code = 0 }
+        "#;
+
+        let config: TestConfig = toml::from_str(toml_str).unwrap();
+        assert!(matches!(config.actions[0].assert, Some(Assertion::NoError)));
+        assert!(matches!(
+            config.actions[1].assert,
+            Some(Assertion::HasError)
+        ));
+        assert!(matches!(
+            config.actions[2].assert,
+            Some(Assertion::ErrorContains { ref text }) if text == "connection failed"
         ));
     }
 }
