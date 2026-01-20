@@ -1,0 +1,49 @@
+# Test configuration for test action wiring validation
+#
+# This test validates that all test actions from CONCURRENT-A2 are properly
+# wired and execute without errors:
+# - send_text: logs the text and warns about orchestrator
+# - stop_generation: logs and warns about orchestrator
+# - snapshot: captures screenshot to output/<name>.png
+# - report_success: logs success
+# - report_failure: logs failure and sets test_failed flag
+#
+# Note: send_text and stop_generation are not yet wired to orchestrator
+# (tracked in follow-up task), but they should execute without crashing.
+
+[test]
+name = "Test Actions Wiring Validation"
+description = "Validates all new test actions execute correctly"
+
+[[actions]]
+time_ms = 0
+action = { type = "log", message = "Starting test actions wiring validation" }
+
+# Test send_text action - should log and warn (not crash)
+[[actions]]
+time_ms = 100
+action = { type = "send_text", text = "Hello from test action wiring validation" }
+
+# Test stop_generation action - should log and warn (not crash)
+[[actions]]
+time_ms = 200
+action = { type = "stop_generation" }
+
+# Test snapshot action - should create output directory and request screenshot
+[[actions]]
+time_ms = 300
+action = { type = "snapshot", name = "test_actions_wiring" }
+
+# Test report_success action - should log success
+[[actions]]
+time_ms = 400
+action = { type = "report_success" }
+
+# Log completion and exit successfully
+[[actions]]
+time_ms = 500
+action = { type = "log", message = "All test actions executed without errors" }
+
+[[actions]]
+time_ms = 600
+action = { type = "exit", code = 0 }

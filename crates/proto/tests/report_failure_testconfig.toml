@@ -1,0 +1,27 @@
+# Test configuration for report_failure action validation
+#
+# This test validates that report_failure:
+# 1. Logs the failure reason at error level
+# 2. Sets the test_failed flag
+# 3. Causes the test to exit with code 1 (even if exit code 0 is specified)
+#
+# Expected result: This test should EXIT WITH CODE 1 (failure)
+# If it exits with code 0, the report_failure wiring is broken.
+
+[test]
+name = "Report Failure Action Test"
+description = "Validates report_failure sets test_failed flag and exits with code 1"
+
+[[actions]]
+time_ms = 0
+action = { type = "log", message = "Testing report_failure action" }
+
+# Report a failure - this should set test_failed = true
+[[actions]]
+time_ms = 100
+action = { type = "report_failure", reason = "Intentional failure for testing report_failure wiring" }
+
+# Exit with code 0 - but final exit code should be 1 because test_failed is true
+[[actions]]
+time_ms = 200
+action = { type = "exit", code = 0 }

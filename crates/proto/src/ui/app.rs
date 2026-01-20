@@ -70,6 +70,8 @@ pub struct ProtoApp {
     orchestrator: Option<OrchestratorHandle>,
     /// Whether we've requested an exit-frame screenshot (waiting for it to complete)
     exit_screenshot_requested: bool,
+    /// Whether a test has reported failure
+    test_failed: bool,
 }
 
 impl ProtoApp {
@@ -143,6 +145,7 @@ impl ProtoApp {
             debug_config,
             orchestrator: None, // Set via set_orchestrator when orchestrator is available
             exit_screenshot_requested: false,
+            test_failed: false,
         }
     }
 
@@ -525,15 +528,11 @@ impl ProtoApp {
                     screenshot::request_screenshot(ctx, &name);
                 }
                 TestCommand::ReportSuccess => {
-                    info!("[TEST] Executing: ReportSuccess");
-                    // Test marked as successful - this is informational
+                    info!("[TEST] Test reported SUCCESS");
                 }
                 TestCommand::ReportFailure { reason } => {
-                    info!("[TEST] Executing: ReportFailure with reason: {}", reason);
-                    // Mark test as failed - set exit code to 1
-                    if self.pending_exit.is_none() || self.pending_exit == Some(0) {
-                        self.pending_exit = Some(1);
-                    }
+                    error!("[TEST] Test reported FAILURE: {}", reason);
+                    self.test_failed = true;
                 }
             }
 
@@ -571,7 +570,9 @@ impl ProtoApp {
 
                 // Handle exit
                 if let Some(code) = self.pending_exit.take() {
-                    let final_code = if runner.test_passed() { code } else { 1 };
+                    // Test fails if runner.test_passed() is false OR test_failed flag is set
+                    let test_passed = runner.test_passed() && !self.test_failed;
+                    let final_code = if test_passed { code } else { 1 };
                     info!("[TEST] Exiting with code {}", final_code);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     std::process::exit(final_code);
