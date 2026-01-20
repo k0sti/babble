@@ -1,0 +1,55 @@
+# Test configuration for LLM streaming tokens
+#
+# This test:
+# 1. Sends text to trigger LLM generation
+# 2. Verifies LLM is generating and tokens are streaming
+# 3. Waits for completion and validates response content
+# 4. Takes a snapshot of the result
+
+[test]
+name = "LLM Streaming Tokens"
+description = "Tests LLM token streaming functionality"
+
+# Action 1: Log start
+[[actions]]
+time_ms = 100
+action = { type = "log", message = "Starting LLM streaming test..." }
+
+# Action 2: Send text to trigger LLM generation
+[[actions]]
+time_ms = 500
+action = { type = "send_text", text = "Count from 1 to 10, one number per line." }
+
+# Action 3: Check LLM is generating after some time
+[[actions]]
+time_ms = 2000
+action = { type = "log", message = "Checking LLM is generating" }
+assert = { type = "llm_is_generating" }
+
+# Action 4: Check tokens are streaming
+[[actions]]
+time_ms = 3000
+action = { type = "log", message = "Checking tokens are streaming" }
+assert = { type = "llm_response_not_empty" }
+
+# Action 5: Wait for LLM to complete
+[[actions]]
+time_ms = 15000
+action = { type = "log", message = "Checking LLM completed" }
+assert = { type = "llm_is_idle" }
+
+# Action 6: Verify response contains expected content
+[[actions]]
+time_ms = 15500
+action = { type = "log", message = "Verifying response content" }
+assert = { type = "llm_response_contains", text = "1" }
+
+# Action 7: Take a snapshot of the result
+[[actions]]
+time_ms = 16000
+action = { type = "snapshot", name = "llm_streaming_result" }
+
+# Action 8: Exit with success
+[[actions]]
+time_ms = 16500
+action = { type = "exit", code = 0 }
