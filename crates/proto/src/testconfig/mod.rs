@@ -64,6 +64,25 @@ pub enum ActionType {
         /// Message to log
         message: String,
     },
+    /// Send text directly to LLM (bypasses STT)
+    SendText {
+        /// Text to send to the LLM
+        text: String,
+    },
+    /// Stop LLM generation
+    StopGeneration,
+    /// Capture screenshot to output/<name>.png
+    Snapshot {
+        /// Name for the snapshot file (without extension)
+        name: String,
+    },
+    /// Mark test as successful
+    ReportSuccess,
+    /// Mark test as failed with reason
+    ReportFailure {
+        /// Reason for failure
+        reason: String,
+    },
 }
 
 /// Assertions to validate test conditions
@@ -271,6 +290,116 @@ mod tests {
         assert!(matches!(
             config.actions[0].assert,
             Some(Assertion::AudioBufferMinSamples { min_samples: 48000 })
+        ));
+    }
+
+    #[test]
+    fn test_parse_send_text_action() {
+        let toml_str = r#"
+            [test]
+            name = "Send text test"
+
+            [[actions]]
+            time_ms = 500
+            action = { type = "send_text", text = "Hello, world!" }
+
+            [[actions]]
+            time_ms = 1000
+            action = { type = "exit", code = 0 }
+        "#;
+
+        let config: TestConfig = toml::from_str(toml_str).unwrap();
+        assert!(matches!(
+            &config.actions[0].action,
+            ActionType::SendText { text } if text == "Hello, world!"
+        ));
+    }
+
+    #[test]
+    fn test_parse_stop_generation_action() {
+        let toml_str = r#"
+            [test]
+            name = "Stop generation test"
+
+            [[actions]]
+            time_ms = 500
+            action = { type = "stop_generation" }
+
+            [[actions]]
+            time_ms = 1000
+            action = { type = "exit", code = 0 }
+        "#;
+
+        let config: TestConfig = toml::from_str(toml_str).unwrap();
+        assert!(matches!(
+            config.actions[0].action,
+            ActionType::StopGeneration
+        ));
+    }
+
+    #[test]
+    fn test_parse_snapshot_action() {
+        let toml_str = r#"
+            [test]
+            name = "Snapshot test"
+
+            [[actions]]
+            time_ms = 500
+            action = { type = "snapshot", name = "initial_state" }
+
+            [[actions]]
+            time_ms = 1000
+            action = { type = "exit", code = 0 }
+        "#;
+
+        let config: TestConfig = toml::from_str(toml_str).unwrap();
+        assert!(matches!(
+            &config.actions[0].action,
+            ActionType::Snapshot { name } if name == "initial_state"
+        ));
+    }
+
+    #[test]
+    fn test_parse_report_success_action() {
+        let toml_str = r#"
+            [test]
+            name = "Report success test"
+
+            [[actions]]
+            time_ms = 500
+            action = { type = "report_success" }
+
+            [[actions]]
+            time_ms = 1000
+            action = { type = "exit", code = 0 }
+        "#;
+
+        let config: TestConfig = toml::from_str(toml_str).unwrap();
+        assert!(matches!(
+            config.actions[0].action,
+            ActionType::ReportSuccess
+        ));
+    }
+
+    #[test]
+    fn test_parse_report_failure_action() {
+        let toml_str = r#"
+            [test]
+            name = "Report failure test"
+
+            [[actions]]
+            time_ms = 500
+            action = { type = "report_failure", reason = "Test condition not met" }
+
+            [[actions]]
+            time_ms = 1000
+            action = { type = "exit", code = 1 }
+        "#;
+
+        let config: TestConfig = toml::from_str(toml_str).unwrap();
+        assert!(matches!(
+            &config.actions[0].action,
+            ActionType::ReportFailure { reason } if reason == "Test condition not met"
         ));
     }
 }

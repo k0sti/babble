@@ -22,6 +22,16 @@ pub enum TestCommand {
     CancelRecord,
     /// Exit the application
     Exit { code: i32 },
+    /// Send text directly to LLM (bypasses STT)
+    SendText { text: String },
+    /// Stop LLM generation
+    StopGeneration,
+    /// Capture screenshot to output/<name>.png
+    Snapshot { name: String },
+    /// Mark test as successful
+    ReportSuccess,
+    /// Mark test as failed with reason
+    ReportFailure { reason: String },
 }
 
 /// Result of an assertion check
@@ -77,7 +87,7 @@ impl AssertionContext {
             is_processing: s.recording.is_processing(),
             is_idle: s.recording.is_idle() && s.llm.is_idle(),
             audio_buffer_samples: s.audio_buffer_samples,
-            stt_phase: None, // Not tracked in unified state
+            stt_phase: None,      // Not tracked in unified state
             stt_speech_chunks: 0, // Not tracked in unified state
             stt_has_transcription: s.transcription.last_text.is_some(),
             stt_has_first_word: s.transcription.has_first_word,
@@ -208,6 +218,13 @@ impl TestRunner {
                 // but we return Exit with special code to indicate no-op
                 TestCommand::Exit { code: -999 } // Sentinel value, won't be used
             }
+            ActionType::SendText { text } => TestCommand::SendText { text: text.clone() },
+            ActionType::StopGeneration => TestCommand::StopGeneration,
+            ActionType::Snapshot { name } => TestCommand::Snapshot { name: name.clone() },
+            ActionType::ReportSuccess => TestCommand::ReportSuccess,
+            ActionType::ReportFailure { reason } => TestCommand::ReportFailure {
+                reason: reason.clone(),
+            },
         }
     }
 
