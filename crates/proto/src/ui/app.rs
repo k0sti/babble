@@ -153,6 +153,10 @@ impl ProtoApp {
             state.max_frames = debug.max_frames;
         }
 
+        // Open debug panel by default when debug mode is enabled or running tests
+        let debug_panel_open =
+            debug_config.as_ref().is_some_and(|d| d.enabled) || test_runner.is_some();
+
         Self {
             initialized: false,
             state: AppState::new(),
@@ -170,8 +174,7 @@ impl ProtoApp {
             last_transcription: None,
             has_first_word: false,
             has_transcription: false,
-            // Open debug panel by default only when debug mode is enabled
-            debug_panel_open: debug_config.as_ref().is_some_and(|d| d.enabled),
+            debug_panel_open,
             debug_config,
             orchestrator,
             exit_screenshot_requested: false,
